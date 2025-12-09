@@ -1,0 +1,20 @@
+{
+  "name": "@plugspace/db",
+  "version": "1.4.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.19.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

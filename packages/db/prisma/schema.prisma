@@ -1,0 +1,290 @@
+// Plugspace.io Titan v1.4 - Complete Database Schema
+// Multi-tenant, production-ready MongoDB schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  USER
+  STUDIO_ADMIN
+  MASTER_ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AgentName {
+  DON
+  MARK
+  JESSICA
+  SHERLOCK
+  ZARA
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  firebaseUid       String   @unique
+  email             String   @unique
+  displayName       String?
+  photoURL          String?
+  role              Role     @default(USER)
+  
+  // Profile
+  firstName         String?
+  lastName          String?
+  phone             String?
+  bio               String?
+  timezone          String   @default("UTC")
+  language          String   @default("en")
+  
+  // Security
+  mfaEnabled        Boolean  @default(false)
+  mfaSecret         String?
+  lastLoginAt       DateTime?
+  lastLoginIP       String?
+  loginAttempts     Int      @default(0)
+  lockedUntil       DateTime?
+  
+  // Organization Membership
+  organizationId    String   @db.ObjectId
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  
+  // Subscription
+  stripeCustomerId  String?
+  subscriptionTier  SubscriptionTier @default(FREE)
+  creditsRemaining  Int      @default(100)
+  
+  // Relations
+  projects          Project[]
+  interactionLogs   InteractionLog[]
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+  
+  @@index([organizationId, email])
+  @@index([firebaseUid])
+  @@map("users")
+}
+
+model Organization {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  slug              String   @unique
+  domain            String?  @unique
+  logo              String?
+  
+  // Subscription
+  tier              SubscriptionTier @default(FREE)
+  billingEmail      String
+  stripeSubscriptionId String?
+  
+  // Limits (based on tier)
+  maxProjects       Int      @default(5)
+  maxUsers          Int      @default(3)
+  maxStorage        Int      @default(1073741824) // 1GB in bytes
+  maxApiCalls       Int      @default(1000)
+  
+  // Usage Tracking
+  currentProjects   Int      @default(0)
+  currentUsers      Int      @default(0)
+  currentStorage    Int      @default(0)
+  apiCallsThisMonth Int      @default(0)
+  
+  // Settings
+  allowedDomains    String[] @default([])
+  ssoEnabled        Boolean  @default(false)
+  
+  // Relations
+  users             User[]
+  projects          Project[]
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([slug])
+  @@map("organizations")
+}
+
+model Project {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  description       String?
+  subdomain         String   @unique
+  customDomain      String?  @unique
+  
+  // Owner
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id])
+  organizationId    String   @db.ObjectId
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  
+  // Status
+  status            ProjectStatus @default(DRAFT)
+  isPublished       Boolean  @default(false)
+  publishedAt       DateTime?
+  
+  // Architecture (from Agent Don)
+  architecture      Json? // Complete ArchitectureOutput
+  
+  // Design (from Agent Jessica)
+  design            Json? // Complete DesignOutput
+  
+  // Code (from Agent Mark)
+  codeFiles         Json? // { [filepath: string]: string }
+  dependencies      Json? // package.json content
+  
+  // Clone Info (from Agent Sherlock)
+  clonedFrom        String?
+  cloneAnalysis     Json?
+  
+  // Deployment
+  deploymentUrl     String?
+  sslEnabled        Boolean  @default(false)
+  cdnEnabled        Boolean  @default(false)
+  
+  // Version Control
+  version           Int      @default(1)
+  previousVersions  Json[]   @default([])
+  
+  // Analytics
+  views             Int      @default(0)
+  lastViewedAt      DateTime?
+  
+  // Relations
+  interactionLogs   InteractionLog[]
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+  
+  @@index([organizationId, userId])
+  @@index([subdomain])
+  @@index([customDomain])
+  @@index([status])
+  @@map("projects")
+}
+
+model InteractionLog {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Context
+  projectId         String   @db.ObjectId
+  project           Project  @relation(fields: [projectId], references: [id])
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id])
+  
+  // Agent Details
+  agentName         AgentName
+  agentModel        String // e.g., "claude-sonnet-4-5-20241022"
+  
+  // Interaction
+  input             String   @db.String // User prompt
+  output            Json     // Agent response
+  
+  // Metrics
+  tokensUsed        Int
+  latencyMs         Int
+  cost              Float    @default(0.0)
+  success           Boolean  @default(true)
+  errorMessage      String?
+  
+  // Metadata
+  timestamp         DateTime @default(now())
+  
+  @@index([projectId, timestamp])
+  @@index([userId, timestamp])
+  @@index([agentName, timestamp])
+  @@map("interaction_logs")
+}
+
+model Template {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  category          String
+  type              String
+  
+  // Template Data (matches frontend template structure)
+  templateData      Json // { nav, products, colors, etc. }
+  
+  // Marketplace
+  featured          Boolean  @default(false)
+  downloads         Int      @default(0)
+  rating            Float    @default(0.0)
+  reviews           Int      @default(0)
+  
+  // Preview
+  previewImage      String?
+  thumbnailImage    String?
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([category])
+  @@index([featured])
+  @@map("templates")
+}
+
+model Theme {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  organizationId    String   @db.ObjectId
+  
+  // Generation Method
+  method            String // "AI Prompt" | "Website Clone" | "Image Analysis" | "HTML Extraction"
+  sourceUrl         String?
+  sourceImage       String?
+  
+  // Theme Data
+  colors            String[] // Array of hex colors
+  typography        Json     // Font families, sizes, etc.
+  components        Json     // Button styles, form styles, etc.
+  
+  // Metadata
+  industry          String?
+  style             String?
+  isActive          Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([organizationId])
+  @@map("themes")
+}
+
+model SystemConfig {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  key               String   @unique
+  value             Json
+  
+  updatedAt         DateTime @updatedAt
+  
+  @@map("system_config")
+}
