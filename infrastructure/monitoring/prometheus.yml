@@ -1,0 +1,51 @@
+# ==============================================
+# PLUGSPACE.IO TITAN v1.4 - PROMETHEUS CONFIG
+# ==============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Server metrics
+  - job_name: 'plugspace-api'
+    static_configs:
+      - targets: ['api:4000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Node.js process metrics
+  - job_name: 'nodejs'
+    static_configs:
+      - targets: 
+          - 'landing:3000'
+          - 'studio:3001'
+          - 'admin:3002'
+          - 'api:4000'
+
+  # Nginx metrics (requires nginx-prometheus-exporter)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+
+  # MongoDB metrics (requires mongodb-exporter)
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+
+  # Redis metrics (requires redis-exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
