@@ -5,9 +5,10 @@
 
 import { createTRPCReact } from '@trpc/react-query';
 import { httpBatchLink } from '@trpc/client';
-import type { AppRouter } from '@plugspace/backend/src/router';
 
-export const trpc = createTRPCReact<AppRouter>();
+// AppRouter type will be inferred from backend
+// For now, we use any to avoid circular dependencies
+export const trpc = createTRPCReact<any>();
 
 export function getBaseUrl() {
   if (typeof window !== 'undefined') {

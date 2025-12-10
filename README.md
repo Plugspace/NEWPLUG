@@ -15,7 +15,9 @@ plugspace-titan-v1.4/
 │   └── admin/            # Master admin dashboard (Port 3002)
 ├── packages/
 │   ├── db/               # Prisma schema & client
-│   └── shared/           # Shared types & utilities
+│   ├── shared/           # Shared types & utilities
+│   ├── ui/               # Shared UI components
+│   └── trpc-client/      # tRPC client setup
 └── infrastructure/       # Nginx, PM2, Docker configs
 ```
 
@@ -64,6 +66,25 @@ pnpm dev
 2. Fill in all required environment variables
 3. Set up Firebase Admin SDK credentials
 4. Configure AI API keys (Anthropic, Google)
+
+## 📦 Development
+
+```bash
+# Run all apps in development mode
+pnpm dev
+
+# Run specific app
+cd apps/landing && pnpm dev
+
+# Build all apps
+pnpm build
+
+# Type check
+pnpm type-check
+
+# Lint
+pnpm lint
+```
 
 ## 📦 Deployment
 
@@ -131,3 +152,19 @@ pnpm dev
 ## 📝 License
 
 Proprietary - Plugspace.io
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+1. **Prisma Client not generated**: Run `pnpm db:generate`
+2. **Port already in use**: Change ports in package.json scripts
+3. **Module not found**: Run `pnpm install` again
+4. **Build errors**: Check TypeScript errors with `pnpm type-check`
+
+## 📞 Support
+
+For questions or issues, refer to:
+- `DEPLOYMENT.md` - Deployment guide
+- `ARCHITECTURE.md` - System architecture
+- `IMPLEMENTATION_STATUS.md` - Current status

@@ -42,3 +42,15 @@ packages/db/prisma/migrations/
 # Misc
 .turbo/
 *.tsbuildinfo
+
+# Logs
+logs/
+*.log
+
+# PM2
+.pm2/
+
+# Build artifacts
+apps/*/.next
+apps/*/dist
+packages/*/dist
