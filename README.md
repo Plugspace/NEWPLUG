@@ -323,16 +323,24 @@ Example error response:
 
 Detailed documentation is available in the `/docs` directory:
 
+### Architecture & Design
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and components
 - **[API Reference](docs/API.md)** - Complete API documentation
-- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
-- **[Security](docs/SECURITY.md)** - Security practices and compliance
+
+### AI & Voice
 - **[AI Agents](docs/AGENTS.md)** - Dual-LLM agent architecture and usage
 - **[Prompts](docs/PROMPTS.md)** - Prompt engineering guide
 - **[Queue System](docs/QUEUE.md)** - Task queue documentation
 - **[Voice System](docs/VOICE_SYSTEM.md)** - Voice interface architecture
 - **[Audio Specs](docs/AUDIO_SPECS.md)** - Audio technical specifications
 - **[Zara Persona](docs/ZARA_PERSONA.md)** - Agent Zara personality guide
+
+### Operations & Security
+- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[Security](docs/SECURITY.md)** - Security practices and compliance
+- **[Monitoring](docs/MONITORING.md)** - Prometheus, Grafana, and alerting
+- **[Backup](docs/BACKUP.md)** - Backup and disaster recovery
+- **[Runbook](docs/RUNBOOK.md)** - Operations runbook and procedures
 
 ## 📊 Monitoring
 

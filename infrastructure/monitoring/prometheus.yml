@@ -1,51 +1,131 @@
 # ==============================================
 # PLUGSPACE.IO TITAN v1.4 - PROMETHEUS CONFIG
 # ==============================================
+# Metrics collection configuration
+# ==============================================
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    environment: 'production'
+    service: 'plugspace'
 
+# Alerting configuration
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
+        - targets:
+          - 'localhost:9093'
+      scheme: http
+      timeout: 10s
 
-rule_files: []
+# Rule files
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
 
+# Scrape configurations
 scrape_configs:
-  # Prometheus self-monitoring
+  # ===========================================
+  # PROMETHEUS SELF-MONITORING
+  # ===========================================
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+    metrics_path: /metrics
 
-  # API Server metrics
+  # ===========================================
+  # NODE EXPORTER (System Metrics)
+  # ===========================================
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '(.*):\d+'
+        replacement: '${1}'
+
+  # ===========================================
+  # PLUGSPACE API
+  # ===========================================
   - job_name: 'plugspace-api'
     static_configs:
-      - targets: ['api:4000']
-    metrics_path: '/metrics'
+      - targets: ['localhost:4000']
+    metrics_path: /api/metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # ===========================================
+  # PLUGSPACE VOICE SERVER
+  # ===========================================
+  - job_name: 'plugspace-voice'
+    static_configs:
+      - targets: ['localhost:4001']
+    metrics_path: /metrics
     scrape_interval: 10s
 
-  # Node.js process metrics
-  - job_name: 'nodejs'
-    static_configs:
-      - targets: 
-          - 'landing:3000'
-          - 'studio:3001'
-          - 'admin:3002'
-          - 'api:4000'
-
-  # Nginx metrics (requires nginx-prometheus-exporter)
+  # ===========================================
+  # NGINX EXPORTER
+  # ===========================================
   - job_name: 'nginx'
     static_configs:
-      - targets: ['nginx-exporter:9113']
+      - targets: ['localhost:9113']
 
-  # MongoDB metrics (requires mongodb-exporter)
+  # ===========================================
+  # MONGODB EXPORTER
+  # ===========================================
   - job_name: 'mongodb'
     static_configs:
-      - targets: ['mongodb-exporter:9216']
+      - targets: ['localhost:9216']
 
-  # Redis metrics (requires redis-exporter)
+  # ===========================================
+  # REDIS EXPORTER
+  # ===========================================
   - job_name: 'redis'
     static_configs:
-      - targets: ['redis-exporter:9121']
+      - targets: ['localhost:9121']
+
+  # ===========================================
+  # PM2 METRICS (via custom endpoint)
+  # ===========================================
+  - job_name: 'pm2'
+    static_configs:
+      - targets: ['localhost:9209']
+    metrics_path: /metrics
+
+  # ===========================================
+  # BLACKBOX EXPORTER (Endpoint Monitoring)
+  # ===========================================
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://plugspace.io
+        - https://plugspace.io/api/health
+        - https://admin.plugspace.io
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+
+  # ===========================================
+  # SSL CERTIFICATE MONITORING
+  # ===========================================
+  - job_name: 'ssl-certificates'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://plugspace.io
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: localhost:9115
