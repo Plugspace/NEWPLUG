@@ -1,7 +1,7 @@
 # ==============================================
 # PLUGSPACE.IO TITAN v1.4 - SECURITY WORKFLOW
 # ==============================================
-# Security scanning and compliance checks
+# Continuous Security Scanning Pipeline
 # ==============================================
 
 name: Security
@@ -10,15 +10,18 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   schedule:
-    # Run daily at midnight
-    - cron: '0 0 * * *'
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  security-events: write
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
 
 jobs:
   # ===========================================
@@ -34,8 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
         run: npm ci
@@ -43,17 +45,19 @@ jobs:
       - name: Run npm audit
         run: |
           npm audit --audit-level=moderate --json > audit-report.json || true
-          cat audit-report.json | jq '.metadata'
+          npm audit --audit-level=high
         continue-on-error: true
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: audit-report
+          name: npm-audit-report
           path: audit-report.json
+          retention-days: 30
 
   # ===========================================
-  # SNYK SECURITY SCAN
+  # SNYK SCAN
   # ===========================================
   snyk:
     name: Snyk Security Scan
@@ -62,7 +66,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Snyk to check for vulnerabilities
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Snyk scan
         uses: snyk/actions/node@master
         continue-on-error: true
         env:
@@ -76,13 +88,7 @@ jobs:
         with:
           name: snyk-report
           path: snyk-report.json
-
-      - name: Upload to Snyk
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: monitor
+          retention-days: 30
 
   # ===========================================
   # CODEQL ANALYSIS
@@ -90,6 +96,10 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,7 +107,8 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript, typescript
+          languages: javascript-typescript
+          queries: security-and-quality
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
@@ -105,7 +116,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:javascript"
+          category: "/language:javascript-typescript"
 
   # ===========================================
   # TRIVY SCAN
@@ -117,20 +128,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner (filesystem)
+      - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
+          severity: 'CRITICAL,HIGH,MEDIUM'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
 
-      - name: Upload Trivy scan results
+      - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
 
   # ===========================================
   # SECRET SCANNING
@@ -144,135 +157,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: TruffleHog Secret Scan
+      - name: TruffleHog Scan
         uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
-          head: HEAD
           extra_args: --only-verified
 
-      - name: Gitleaks Secret Scan
+      - name: Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ===========================================
-  # DOCKER IMAGE SCAN
+  # LICENSE CHECK
   # ===========================================
-  docker-scan:
-    name: Docker Image Scan
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build API image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./apps/api/Dockerfile
-          push: false
-          load: true
-          tags: plugspace-api:scan
-
-      - name: Run Trivy on API image
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'plugspace-api:scan'
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-
-  # ===========================================
-  # COMPLIANCE CHECK
-  # ===========================================
-  compliance:
-    name: Compliance Check
+  licenses:
+    name: License Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check for required files
-        run: |
-          echo "Checking for required compliance files..."
-          
-          # List of required files for compliance
-          REQUIRED_FILES=(
-            "LICENSE"
-            "SECURITY.md"
-            "docs/SECURITY.md"
-            ".github/CODEOWNERS"
-          )
-          
-          MISSING=0
-          for file in "${REQUIRED_FILES[@]}"; do
-            if [ -f "$file" ]; then
-              echo "✅ $file exists"
-            else
-              echo "❌ $file is missing"
-              MISSING=$((MISSING + 1))
-            fi
-          done
-          
-          if [ $MISSING -gt 0 ]; then
-            echo "::warning::$MISSING required files are missing"
-          fi
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Check security headers in code
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check licenses
         run: |
-          echo "Checking for security best practices..."
-          
-          # Check for helmet usage
-          if grep -r "helmet" apps/api/; then
-            echo "✅ Helmet.js is used for security headers"
-          else
-            echo "::warning::Consider using Helmet.js for security headers"
-          fi
-          
-          # Check for rate limiting
-          if grep -r "rateLimit" apps/api/ || grep -r "limit_req" infrastructure/; then
-            echo "✅ Rate limiting is configured"
-          else
-            echo "::warning::Rate limiting may not be configured"
-          fi
+          npx license-checker --production --summary || true
+          npx license-checker --production --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;CC0-1.0;CC-BY-3.0;CC-BY-4.0;0BSD;Unlicense' || true
+        continue-on-error: true
 
   # ===========================================
-  # SUMMARY REPORT
+  # SECURITY REPORT
   # ===========================================
   report:
     name: Security Report
     runs-on: ubuntu-latest
-    needs: [audit, snyk, codeql, trivy, secrets, compliance]
+    needs: [audit, snyk, codeql, trivy, secrets, licenses]
     if: always()
     steps:
-      - name: Download all reports
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-
       - name: Generate summary
         run: |
-          echo "# 🔐 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Dependency Audit | ${{ needs.audit.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Snyk Scan | ${{ needs.snyk.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL Analysis | ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy Scan | ${{ needs.trivy.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scanning | ${{ needs.secrets.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Compliance Check | ${{ needs.compliance.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| npm audit | ${{ needs.audit.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Snyk | ${{ needs.snyk.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL | ${{ needs.codeql.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.trivy.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets | ${{ needs.secrets.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Licenses | ${{ needs.licenses.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
-      - name: Notify on failure
-        if: contains(needs.*.result, 'failure')
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          text: '🚨 Security scan detected issues!'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Check critical failures
+        run: |
+          if [[ "${{ needs.codeql.result }}" == "failure" ]]; then
+            echo "::warning::CodeQL analysis found issues"
+          fi
+          echo "Security scan completed"

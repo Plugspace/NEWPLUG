@@ -1,10 +1,11 @@
 # 🚀 Plugspace.io Titan v1.4
 
-**Enterprise-Grade Voice-First AI Coding Platform**
+**Enterprise-Grade Voice-First AI Website Builder Platform**
 
 [![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/plugspace/titan)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
+[![CI](https://github.com/plugspace/titan/actions/workflows/ci.yml/badge.svg)](https://github.com/plugspace/titan/actions/workflows/ci.yml)
 
 Plugspace Titan is a production-ready, enterprise-grade platform for building websites using voice commands and AI agents. Simply speak your ideas, and watch them come to life.
 
@@ -48,12 +49,15 @@ Plugspace Titan is a production-ready, enterprise-grade platform for building we
 │  SSL/TLS Termination │ Load Balancing │ Rate Limiting       │
 └─────────────────────────────────────────────────────────────┘
                         │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   API LAYER (tRPC)                           │
-│                   Port 4000                                  │
-└─────────────────────────────────────────────────────────────┘
-                        │
+        ┌───────────────┴───────────────┐
+        ▼                               ▼
+┌───────────────────┐         ┌────────────────────┐
+│   API SERVER      │         │   VOICE SERVER     │
+│   Port 4000       │         │   Port 4001        │
+│   (tRPC)          │         │   (WebSocket)      │
+└───────────────────┘         └────────────────────┘
+        │                               │
+        └───────────────┬───────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   DATA LAYER                                 │
@@ -66,19 +70,17 @@ Plugspace Titan is a production-ready, enterprise-grade platform for building we
 ```
 plugspace-titan/
 ├── apps/
-│   ├── api/              # tRPC Backend API
+│   ├── api/              # tRPC Backend API (Port 4000)
 │   │   └── src/
 │   │       ├── agents/   # AI Agents (Don, Jessica, Mark, Sherlock)
 │   │       ├── services/ # Core services (LLM, NLP, Voice, Suggestions)
 │   │       ├── queue/    # BullMQ task queue management
 │   │       └── routers/  # tRPC API routers
-│   ├── server/           # Voice WebSocket Server
-│   │   ├── src/          # Gemini Live API integration
-│   │   ├── config/       # Voice & security configuration
-│   │   └── Dockerfile    # Container deployment
-│   ├── landing/          # Landing Page (Next.js)
-│   ├── studio/           # User Studio (Next.js)
-│   └── admin/            # Master Admin Dashboard (Next.js)
+│   ├── server/           # Voice WebSocket Server (Port 4001)
+│   │   └── src/          # Gemini Live API integration
+│   ├── landing/          # Landing Page (Next.js, Port 3000)
+│   ├── studio/           # User Studio (Next.js, Port 3001)
+│   └── admin/            # Master Admin Dashboard (Next.js, Port 3002)
 ├── packages/
 │   ├── types/            # Shared TypeScript types
 │   ├── utils/            # Shared utilities
@@ -88,14 +90,22 @@ plugspace-titan/
 │   │       └── components/voice/  # Voice UI components
 │   └── database/         # Prisma schema & database utilities
 ├── infrastructure/
+│   ├── docker/           # Docker Compose & Dockerfiles
 │   ├── nginx/            # Nginx configuration
-│   ├── pm2/              # PM2 ecosystem config
-│   ├── docker/           # Docker configurations
-│   └── monitoring/       # Prometheus & Grafana configs
+│   ├── monitoring/       # Prometheus, Grafana configs
+│   ├── backup/           # Backup & restore scripts
+│   └── alertmanager/     # Alert configuration
+├── deploy/               # VPS deployment scripts
+│   ├── vps-hardening.sh  # Server security hardening
+│   ├── mongodb-setup.sh  # MongoDB installation
+│   ├── redis-setup.sh    # Redis installation
+│   ├── nginx-setup.sh    # Nginx configuration
+│   ├── ssl-setup.sh      # SSL/TLS setup
+│   └── pm2-setup.sh      # PM2 process manager
 ├── docs/                 # Technical documentation
-├── scripts/
-│   ├── deploy.sh         # Deployment script
-│   └── setup.sh          # Server setup script
+├── .github/workflows/    # CI/CD pipelines
+├── ecosystem.config.js   # PM2 configuration
+├── Makefile              # Build automation
 └── package.json          # Root workspace config
 ```
 
@@ -104,7 +114,7 @@ plugspace-titan/
 ### Prerequisites
 
 - Node.js 20 LTS
-- Docker & Docker Compose
+- Docker & Docker Compose (optional)
 - Git
 
 ### Installation
@@ -114,54 +124,95 @@ plugspace-titan/
 git clone https://github.com/plugspace/titan.git
 cd titan
 
-# Run first-time setup (installs deps, creates .env, sets up git hooks)
+# Run setup (installs deps, generates Prisma client)
 make setup
 
-# Edit .env with your configuration
+# Copy and configure environment
+cp .env.example .env
 vim .env
 
-# Start development environment
+# Start development servers
 make dev
 ```
 
-### Using Docker (Recommended)
+### Using Docker
 
 ```bash
-# Start all services with Docker Compose
-make dev-docker
+# Build and start all services
+make docker
 
 # View logs
-make logs
+make docker-logs
 
 # Stop services
-make stop
-```
-
-### Manual Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Generate Prisma client
-npm run db:generate
-
-# Push database schema
-npm run db:push
-
-# Build all packages
-npm run build
-
-# Start development servers
-npm run dev
+make docker-down
 ```
 
 ### Development URLs
 
-- **Landing Page**: http://localhost:3000
-- **Studio**: http://localhost:3001
-- **Admin Dashboard**: http://localhost:3002
-- **API**: http://localhost:4000
+| Service | URL |
+|---------|-----|
+| Landing Page | http://localhost:3000 |
+| Studio | http://localhost:3001 |
+| Admin Dashboard | http://localhost:3002 |
+| API | http://localhost:4000 |
+| Voice Server | http://localhost:4001 |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3030 |
+
+## 🛠️ Make Commands
+
+```bash
+# Development
+make install          # Install dependencies
+make dev              # Start all dev servers
+make dev-api          # Start API server only
+make dev-voice        # Start Voice server only
+make dev-landing      # Start Landing page only
+make dev-studio       # Start Studio only
+make dev-admin        # Start Admin panel only
+
+# Build
+make build            # Build all packages
+make build-prod       # Production build
+
+# Testing
+make test             # Run all tests
+make test-coverage    # Run tests with coverage
+make lint             # Run linter
+make lint-fix         # Fix lint issues
+make type-check       # Run TypeScript check
+
+# Database
+make db-generate      # Generate Prisma client
+make db-push          # Push schema to database
+make db-migrate       # Run migrations
+make db-studio        # Open Prisma Studio
+make db-seed          # Seed database
+
+# Docker
+make docker-build     # Build Docker images
+make docker-up        # Start containers
+make docker-down      # Stop containers
+make docker-logs      # View logs
+
+# Production
+make start-prod       # Start with PM2
+make reload           # Reload PM2 processes
+make status           # View PM2 status
+make logs             # View PM2 logs
+
+# CI/CD
+make ci               # Run CI checks (lint, type-check, test, build)
+make pre-commit       # Pre-commit checks
+
+# Cleanup
+make clean            # Clean build artifacts
+make clean-all        # Deep clean (incl. node_modules)
+
+# Help
+make help             # Show all available commands
+```
 
 ## 🔧 Configuration
 
@@ -170,107 +221,63 @@ npm run dev
 See `.env.example` for all available configuration options.
 
 Key variables:
-- `DATABASE_URL` - MongoDB connection string
-- `REDIS_URL` - Redis connection string
-- `ANTHROPIC_API_KEY` - Claude API key for AI agents
-- `GOOGLE_AI_API_KEY` - Gemini API key for voice/vision
-- `FIREBASE_*` - Firebase Admin SDK credentials
-- `STRIPE_*` - Stripe payment integration
-
-## 🛠️ Make Commands
-
-All automation is handled through the Makefile:
-
 ```bash
-# Setup & Installation
-make setup            # Complete first-time setup
-make install          # Install dependencies
-make install-clean    # Clean install all dependencies
-
-# Development
-make dev              # Start development with hot-reload
-make dev-docker       # Full Docker development environment
-make dev-services     # Start only database services
-
-# Building
-make build            # Build all applications
-make build-docker     # Build Docker images
-
-# Testing
-make test             # Run full test suite
-make lint             # Run ESLint
-make typecheck        # TypeScript type checking
-make check            # Run all checks (lint, type, test)
-
 # Database
-make db-generate      # Generate Prisma client
-make db-push          # Push schema changes
-make db-migrate       # Run migrations
-make db-seed          # Seed database
-make db-studio        # Open Prisma Studio
+DATABASE_URL=mongodb://localhost:27017/plugspace
+REDIS_URL=redis://localhost:6379
 
-# Production
-make prod             # Production deployment
-make deploy           # Full production deployment
-make deploy-rolling   # Zero-downtime rolling deployment
-make scale            # Horizontal scaling
+# AI APIs
+ANTHROPIC_API_KEY=sk-ant-...        # Claude API key
+GOOGLE_AI_API_KEY=AIza...           # Gemini API key
 
-# Monitoring
-make logs             # View all service logs
-make health           # Check service health
-make monitor          # Open Grafana dashboard
+# Firebase
+FIREBASE_PROJECT_ID=...
+FIREBASE_PRIVATE_KEY=...
+FIREBASE_CLIENT_EMAIL=...
 
-# Security
-make security-scan    # Run security vulnerability scan
-make security-audit   # Full security audit
-
-# Backup & Restore
-make backup           # Create database backup
-make restore          # Restore from backup
-
-# Cleanup
-make clean            # Clean build artifacts
-make clean-docker     # Remove Docker containers
-make prune            # Prune Docker system
+# Stripe (optional)
+STRIPE_SECRET_KEY=sk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 ## 🐳 Docker Deployment
 
 ```bash
-# Development environment
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Development with monitoring
+docker compose -f infrastructure/docker/docker-compose.yml \
+  --profile monitoring up -d
 
-# Production environment
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Production
+docker compose -f infrastructure/docker/docker-compose.yml up -d
 
 # Scale services
-docker compose up -d --scale api=3
+docker compose -f infrastructure/docker/docker-compose.yml \
+  up -d --scale api=3
 
 # View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
 ```
 
 ## 📦 Production Deployment
 
-### Using PM2
+### VPS Deployment (Hostinger)
 
 ```bash
-# Run the setup script (on a fresh Ubuntu 24.04 server)
-sudo ./scripts/setup.sh
+# 1. Run VPS hardening (on fresh Ubuntu 24.04)
+sudo ./deploy/vps-hardening.sh
 
-# Clone the repository
-git clone https://github.com/plugspace/titan.git /var/www/plugspace
-cd /var/www/plugspace
+# 2. Setup databases
+sudo ./deploy/mongodb-setup.sh
+sudo ./deploy/redis-setup.sh
 
-# Configure environment
-cp .env.example .env
-vim .env
+# 3. Setup Nginx & SSL
+sudo ./deploy/nginx-setup.sh
+sudo ./deploy/ssl-setup.sh --domain plugspace.io --email admin@plugspace.io
 
-# Run deployment
-sudo ./scripts/deploy.sh
+# 4. Setup PM2
+./deploy/pm2-setup.sh
+
+# Application will be managed via GitHub Actions CI/CD
 ```
 
 ### SSL Certificates
@@ -295,57 +302,14 @@ certbot --nginx \
 - **Encryption**: AES-256-GCM for sensitive data at rest
 - **HTTPS**: TLS 1.3 with Let's Encrypt
 
-## 🚨 Error Handling
-
-Comprehensive error handling system with:
-
-- **Error Categories**: Authentication, Authorization, Validation, Rate Limiting, Server, AI
-- **Error Codes**: Standardized codes (e.g., `AUTH_001`, `VAL_001`)
-- **Request Tracking**: Unique request IDs for debugging
-- **Retry Logic**: Automatic retry for transient failures
-- **User-Friendly Messages**: Clear suggestions for resolution
-
-Example error response:
-```json
-{
-  "success": false,
-  "error": {
-    "code": "AUTH_001",
-    "message": "Authentication required",
-    "requestId": "req_abc123",
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "suggestion": "Please log in to access this resource."
-  }
-}
-```
-
 ## 📚 Documentation
 
-Detailed documentation is available in the `/docs` directory:
-
-### Architecture & Design
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
-- **[API Reference](docs/API.md)** - Complete API documentation
-
-### AI & Voice
-- **[AI Agents](docs/AGENTS.md)** - Dual-LLM agent architecture and usage
-- **[Prompts](docs/PROMPTS.md)** - Prompt engineering guide
-- **[Queue System](docs/QUEUE.md)** - Task queue documentation
-- **[Voice System](docs/VOICE_SYSTEM.md)** - Voice interface architecture
-- **[Audio Specs](docs/AUDIO_SPECS.md)** - Audio technical specifications
-- **[Zara Persona](docs/ZARA_PERSONA.md)** - Agent Zara personality guide
-
-### Operations & Security
-- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
-- **[Security](docs/SECURITY.md)** - Security practices and compliance
-- **[Monitoring](docs/MONITORING.md)** - Prometheus, Grafana, and alerting
-- **[Backup](docs/BACKUP.md)** - Backup and disaster recovery
-- **[Runbook](docs/RUNBOOK.md)** - Operations runbook and procedures
-
-## 📊 Monitoring
-
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3030 (admin/admin)
+| Category | Documents |
+|----------|-----------|
+| **Architecture** | [Architecture](docs/ARCHITECTURE.md), [API Reference](docs/API.md) |
+| **AI & Voice** | [AI Agents](docs/AGENTS.md), [Prompts](docs/PROMPTS.md), [Queue System](docs/QUEUE.md), [Voice System](docs/VOICE_SYSTEM.md), [Audio Specs](docs/AUDIO_SPECS.md), [Zara Persona](docs/ZARA_PERSONA.md) |
+| **Operations** | [Deployment](docs/DEPLOYMENT.md), [Monitoring](docs/MONITORING.md), [Backup](docs/BACKUP.md), [Runbook](docs/RUNBOOK.md) |
+| **Security** | [Security](docs/SECURITY.md) |
 
 ## 🧪 Testing
 
@@ -354,7 +318,7 @@ Detailed documentation is available in the `/docs` directory:
 npm run test
 
 # Run with coverage
-npm run test -- --coverage
+npm run test:ci
 
 # Type checking
 npm run type-check

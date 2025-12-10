@@ -1,0 +1,45 @@
+# ==============================================
+# PLUGSPACE.IO TITAN v1.4 - VOICE SERVER DOCKERFILE
+# ==============================================
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY packages/types/package.json ./packages/types/
+COPY packages/utils/package.json ./packages/utils/
+COPY apps/server/package.json ./apps/server/
+RUN npm ci --legacy-peer-deps
+
+# Build the application
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build packages and voice server
+RUN npm run build --workspace=@plugspace/types || true
+RUN npm run build --workspace=@plugspace/utils || true
+RUN npm run build --workspace=@plugspace/voice-server
+
+# Production image
+FROM base AS runner
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 plugspace
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/server/dist ./apps/server/dist
+COPY --from=builder /app/apps/server/package.json ./apps/server/
+
+USER plugspace
+
+EXPOSE 4001
+ENV VOICE_SERVER_PORT 4001
+
+WORKDIR /app/apps/server
+CMD ["node", "dist/index.js"]

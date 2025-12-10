@@ -1,24 +1,29 @@
 # ==============================================
 # PLUGSPACE.IO TITAN v1.4 - DOCKER COMPOSE
 # ==============================================
+# Enterprise Voice-First AI Website Builder
+# ==============================================
 
 version: '3.8'
 
 services:
-  # MongoDB Replica Set
-  mongodb-primary:
+  # ===========================================
+  # DATABASES
+  # ===========================================
+
+  mongodb:
     image: mongo:7
-    container_name: plugspace-mongodb-primary
+    container_name: plugspace-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: plugspace
     volumes:
       - mongodb_data:/data/db
-      - ./mongodb/init:/docker-entrypoint-initdb.d
-    command: mongod --replSet rs0 --keyFile /etc/mongodb/keyfile --bind_ip_all
+      - ../mongodb:/docker-entrypoint-initdb.d:ro
     networks:
       - plugspace-network
     healthcheck:
@@ -26,42 +31,53 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
 
-  # Redis Cluster
   redis:
     image: redis:7-alpine
     container_name: plugspace-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-password}
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-password}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
       - plugspace-network
     healthcheck:
-      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-password}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-password}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # API Server
+  # ===========================================
+  # APPLICATION SERVICES
+  # ===========================================
+
   api:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.api
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
     container_name: plugspace-api
     restart: unless-stopped
     ports:
       - "4000:4000"
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=mongodb://admin:${MONGO_ROOT_PASSWORD:-password}@mongodb-primary:27017/plugspace?authSource=admin&replicaSet=rs0
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-password}@redis:6379
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      DATABASE_URL: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-password}@mongodb:27017/plugspace?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD:-password}@redis:6379
     env_file:
       - ../../.env
     depends_on:
-      mongodb-primary:
+      mongodb:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -72,59 +88,96 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
-  # Landing Page
+  voice:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.voice
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
+    container_name: plugspace-voice
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      VOICE_SERVER_PORT: 4001
+      REDIS_URL: redis://:${REDIS_PASSWORD:-password}@redis:6379
+    env_file:
+      - ../../.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - plugspace-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   landing:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.landing
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
     container_name: plugspace-landing
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:4000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
     depends_on:
       - api
     networks:
       - plugspace-network
 
-  # Studio
   studio:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.studio
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
     container_name: plugspace-studio
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:4000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
     depends_on:
       - api
     networks:
       - plugspace-network
 
-  # Admin Dashboard
   admin:
     build:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.admin
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
     container_name: plugspace-admin
     restart: unless-stopped
     ports:
       - "3002:3002"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:4000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3002
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
     depends_on:
       - api
     networks:
       - plugspace-network
 
-  # Nginx Reverse Proxy
+  # ===========================================
+  # REVERSE PROXY
+  # ===========================================
+
   nginx:
     image: nginx:alpine
     container_name: plugspace-nginx
@@ -134,59 +187,140 @@ services:
       - "443:443"
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/sites:/etc/nginx/sites-enabled:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/projects:/var/www/projects:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - landing
       - studio
       - admin
       - api
+      - voice
     networks:
       - plugspace-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Prometheus (Monitoring)
+  # ===========================================
+  # MONITORING (Optional - enable in production)
+  # ===========================================
+
   prometheus:
     image: prom/prometheus:latest
     container_name: plugspace-prometheus
     restart: unless-stopped
+    profiles:
+      - monitoring
     ports:
       - "9090:9090"
     volumes:
       - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
     networks:
       - plugspace-network
 
-  # Grafana (Dashboards)
   grafana:
     image: grafana/grafana:latest
     container_name: plugspace-grafana
     restart: unless-stopped
+    profiles:
+      - monitoring
     ports:
       - "3030:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
     depends_on:
       - prometheus
     networks:
       - plugspace-network
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: plugspace-alertmanager
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "9093:9093"
+    volumes:
+      - ../alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - plugspace-network
+
+  # ===========================================
+  # LOGGING (Optional - enable in production)
+  # ===========================================
+
+  loki:
+    image: grafana/loki:latest
+    container_name: plugspace-loki
+    restart: unless-stopped
+    profiles:
+      - logging
+    ports:
+      - "3100:3100"
+    volumes:
+      - ../loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - plugspace-network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: plugspace-promtail
+    restart: unless-stopped
+    profiles:
+      - logging
+    volumes:
+      - ../promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - plugspace-network
+
+# ===========================================
+# NETWORKS
+# ===========================================
+
 networks:
   plugspace-network:
     driver: bridge
+    name: plugspace-network
+
+# ===========================================
+# VOLUMES
+# ===========================================
 
 volumes:
   mongodb_data:
+    name: plugspace-mongodb-data
   redis_data:
+    name: plugspace-redis-data
   prometheus_data:
+    name: plugspace-prometheus-data
   grafana_data:
+    name: plugspace-grafana-data
+  alertmanager_data:
+    name: plugspace-alertmanager-data
+  loki_data:
+    name: plugspace-loki-data

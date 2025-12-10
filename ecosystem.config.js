@@ -11,7 +11,7 @@ module.exports = {
     // ===========================================
     {
       name: 'plugspace-frontend',
-      cwd: './apps/frontend',
+      cwd: './apps/landing',
       script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3000',
       instances: 'max',
