@@ -2,7 +2,7 @@
 // PLUGSPACE.IO TITAN v1.4 - DATABASE UTILITIES
 // ==============================================
 
-import { prisma, Prisma } from './client';
+import { prisma } from './client';
 
 // ============ PAGINATION ============
 
@@ -54,22 +54,6 @@ export function createPaginatedResult<T>(
 
 // ============ SOFT DELETE ============
 
-export async function softDelete<T extends { deletedAt: Date | null }>(
-  model: Prisma.ModelName,
-  id: string
-): Promise<T> {
-  const modelDelegate = (prisma as Record<string, unknown>)[
-    model.toLowerCase()
-  ] as {
-    update: (args: { where: { id: string }; data: { deletedAt: Date } }) => Promise<T>;
-  };
-
-  return modelDelegate.update({
-    where: { id },
-    data: { deletedAt: new Date() },
-  });
-}
-
 export function excludeDeleted<T extends Record<string, unknown>>(
   where: T
 ): T & { deletedAt: null } {
@@ -102,13 +86,11 @@ export async function executeInTransaction<T>(
   options?: {
     maxWait?: number;
     timeout?: number;
-    isolationLevel?: Prisma.TransactionIsolationLevel;
   }
 ): Promise<T> {
   return prisma.$transaction(fn, {
     maxWait: options?.maxWait ?? 5000,
     timeout: options?.timeout ?? 30000,
-    isolationLevel: options?.isolationLevel,
   });
 }
 
@@ -127,14 +109,18 @@ export async function generateUniqueSlug(
   let counter = 0;
   let uniqueSlug = slug;
 
-  const modelDelegate = prisma[model] as {
-    findFirst: (args: { where: Record<string, string> }) => Promise<unknown>;
-  };
-
   while (true) {
-    const existing = await modelDelegate.findFirst({
-      where: { [field]: uniqueSlug },
-    });
+    let existing: unknown = null;
+    
+    if (model === 'organization') {
+      existing = await prisma.organization.findFirst({
+        where: { [field]: uniqueSlug } as any,
+      });
+    } else {
+      existing = await prisma.project.findFirst({
+        where: { [field]: uniqueSlug } as any,
+      });
+    }
 
     if (!existing) {
       return uniqueSlug;
@@ -147,26 +133,31 @@ export async function generateUniqueSlug(
 
 // ============ USAGE TRACKING ============
 
-export async function incrementUsage(
-  organizationId: string,
-  field: 'currentProjects' | 'currentUsers' | 'currentStorage' | 'apiCallsThisMonth',
-  amount: number = 1
-): Promise<void> {
-  await prisma.organization.update({
-    where: { id: organizationId },
-    data: { [field]: { increment: amount } },
-  });
+interface OrgLimits {
+  projects: number;
+  users: number;
+  storage: number;
+  apiCalls: number;
+  aiCredits: number;
 }
 
-export async function decrementUsage(
-  organizationId: string,
-  field: 'currentProjects' | 'currentUsers' | 'currentStorage' | 'apiCallsThisMonth',
-  amount: number = 1
-): Promise<void> {
-  await prisma.organization.update({
-    where: { id: organizationId },
-    data: { [field]: { decrement: amount } },
-  });
+interface OrgUsage {
+  projects: number;
+  users: number;
+  storage: number;
+  apiCallsThisMonth: number;
+  aiCreditsUsed: number;
+}
+
+function parseJsonField<T>(field: unknown, defaultValue: T): T {
+  if (typeof field === 'string') {
+    try {
+      return JSON.parse(field) as T;
+    } catch {
+      return defaultValue;
+    }
+  }
+  return (field as T) || defaultValue;
 }
 
 export async function checkQuota(
@@ -176,14 +167,8 @@ export async function checkQuota(
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: {
-      maxProjects: true,
-      maxUsers: true,
-      maxStorage: true,
-      maxApiCalls: true,
-      currentProjects: true,
-      currentUsers: true,
-      currentStorage: true,
-      apiCallsThisMonth: true,
+      limits: true,
+      usage: true,
     },
   });
 
@@ -191,11 +176,17 @@ export async function checkQuota(
     throw new Error('Organization not found');
   }
 
+  const defaultLimits: OrgLimits = { projects: 5, users: 3, storage: 1073741824, apiCalls: 1000, aiCredits: 100 };
+  const defaultUsage: OrgUsage = { projects: 0, users: 0, storage: 0, apiCallsThisMonth: 0, aiCreditsUsed: 0 };
+
+  const limits = parseJsonField<OrgLimits>(org.limits, defaultLimits);
+  const usage = parseJsonField<OrgUsage>(org.usage, defaultUsage);
+
   const resourceMap = {
-    projects: { current: org.currentProjects, max: org.maxProjects },
-    users: { current: org.currentUsers, max: org.maxUsers },
-    storage: { current: org.currentStorage, max: org.maxStorage },
-    apiCalls: { current: org.apiCallsThisMonth, max: org.maxApiCalls },
+    projects: { current: usage.projects, max: limits.projects },
+    users: { current: usage.users, max: limits.users },
+    storage: { current: usage.storage, max: limits.storage },
+    apiCalls: { current: usage.apiCallsThisMonth, max: limits.apiCalls },
   };
 
   const { current, max } = resourceMap[resource];
@@ -215,7 +206,7 @@ export async function logActivity(params: {
   action: string;
   resource?: string;
   resourceId?: string;
-  details?: Record<string, unknown>;
+  details?: object;
   ip?: string;
   userAgent?: string;
 }): Promise<void> {
@@ -226,7 +217,7 @@ export async function logActivity(params: {
       action: params.action,
       resource: params.resource,
       resourceId: params.resourceId,
-      details: params.details ?? {},
+      details: params.details,
       ip: params.ip,
       userAgent: params.userAgent,
     },

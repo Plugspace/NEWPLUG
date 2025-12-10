@@ -2,7 +2,28 @@
 // PLUGSPACE.IO TITAN v1.4 - PRISMA CLIENT
 // ==============================================
 
-import { PrismaClient } from '../generated/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+
+// Re-export types from Prisma client
+export type { PrismaClient } from '@prisma/client';
+export { Prisma } from '@prisma/client';
+
+// Re-export enums
+export {
+  Role,
+  ProjectStatus,
+  AgentName,
+  SubscriptionTier,
+  AccountStatus,
+  InvitationStatus,
+  TemplateStatus,
+  BillingCycle,
+  MfaMethod,
+  OAuthProvider,
+  WebhookEvent,
+  FeatureFlagStatus,
+  DeploymentEnvironment,
+} from '@prisma/client';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -24,17 +45,6 @@ export const prisma = globalThis.prisma ?? prismaClientSingleton();
 if (process.env.NODE_ENV !== 'production') {
   globalThis.prisma = prisma;
 }
-
-export type { PrismaClient } from '../generated/client';
-export {
-  Role,
-  ProjectStatus,
-  AgentName,
-  SubscriptionTier,
-} from '../generated/client';
-
-// Re-export Prisma namespace for types
-export { Prisma } from '../generated/client';
 
 // Database connection helpers
 export async function connectDatabase(): Promise<void> {

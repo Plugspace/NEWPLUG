@@ -1,16 +1,9 @@
 // ==============================================
-// PLUGSPACE.IO TITAN v1.4 - ENTERPRISE DATABASE SCHEMA
-// ==============================================
-// Production-ready MongoDB schema with:
-// - Multi-tenant architecture
-// - Comprehensive user management
-// - Full audit trails
-// - Enterprise security features
+// PLUGSPACE.IO TITAN v1.4 - DATABASE SCHEMA
 // ==============================================
 
 generator client {
   provider        = "prisma-client-js"
-  output          = "../generated/client"
   previewFeatures = ["fullTextSearch", "fullTextIndex"]
 }
 
@@ -127,17 +120,15 @@ model User {
   photoURL        String?
   role            Role     @default(USER)
 
-  // Profile
   firstName       String?
   lastName        String?
   phone           String?
   bio             String?
   timezone        String   @default("UTC")
   language        String   @default("en")
-  preferences     Json?    // User preferences (theme, notifications, etc.)
-  avatarColor     String?  // For generated avatars
+  preferences     Json?
+  avatarColor     String?
 
-  // Account Status
   status          AccountStatus @default(PENDING)
   emailVerified   Boolean  @default(false)
   phoneVerified   Boolean  @default(false)
@@ -145,71 +136,57 @@ model User {
   verificationExpiry DateTime?
   onboardingCompleted Boolean @default(false)
 
-  // Security - MFA
   mfaEnabled      Boolean  @default(false)
   mfaMethods      MfaMethod[] @default([])
-  mfaSecret       String?  // TOTP secret
-  backupCodes     String[] @default([]) // Encrypted backup codes
+  mfaSecret       String?
+  backupCodes     String[] @default([])
   mfaRecoveryEmail String?
 
-  // Security - Login Tracking
   lastLoginAt     DateTime?
   lastLoginIP     String?
   lastLoginUserAgent String?
-  lastLoginLocation Json?  // { country, city, lat, lng }
+  lastLoginLocation Json?
   loginAttempts   Int      @default(0)
   lockedUntil     DateTime?
   passwordChangedAt DateTime?
-  securityQuestions Json? // Encrypted security Q&A
+  securityQuestions Json?
 
-  // OAuth Providers
   oauthProviders  OAuthConnection[]
 
-  // Organization Membership
   organizationId  String   @db.ObjectId
   organization    Organization @relation(fields: [organizationId], references: [id])
-  teamRole        String?  // Custom role within organization
+  teamRole        String?
   department      String?
   title           String?
 
-  // Subscription & Billing
   stripeCustomerId    String?
   subscriptionTier    SubscriptionTier @default(FREE)
-  subscriptionStatus  String?  // active, past_due, cancelled, etc.
+  subscriptionStatus  String?
   billingCycle        BillingCycle?
   trialEndsAt         DateTime?
   creditsRemaining    Int      @default(100)
   creditsUsedThisMonth Int     @default(0)
 
-  // API Access
   apiKeys           ApiKey[]
-  
-  // Sessions
   sessions          Session[]
-
-  // Relations
   projects          Project[]
   interactionLogs   InteractionLog[]
   activityLogs      ActivityLog[]
   notifications     Notification[]
   invitationsSent   Invitation[]    @relation("InvitationSender")
 
-  // Audit
   createdBy       String?  @db.ObjectId
   updatedBy       String?  @db.ObjectId
   deletedBy       String?  @db.ObjectId
   
-  // Metadata
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
-  metadata        Json?    // Additional metadata
+  metadata        Json?
 
-  @@index([organizationId, email])
-  @@index([firebaseUid])
+  @@index([organizationId])
   @@index([status])
   @@index([subscriptionTier])
-  @@fulltext([email, displayName, firstName, lastName])
   @@map("users")
 }
 
@@ -219,12 +196,12 @@ model OAuthConnection {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   provider    OAuthProvider
-  providerId  String   // Provider's user ID
+  providerId  String
   email       String?
   displayName String?
   avatarUrl   String?
-  accessToken String?  // Encrypted
-  refreshToken String? // Encrypted
+  accessToken String?
+  refreshToken String?
   tokenExpiry DateTime?
   scope       String[]
   
@@ -244,18 +221,15 @@ model Session {
   token         String   @unique
   refreshToken  String?  @unique
   
-  // Device info
   deviceId      String?
   deviceName    String?
-  deviceType    String?  // desktop, mobile, tablet
+  deviceType    String?
   browser       String?
   os            String?
   
-  // Location
   ip            String?
   location      Json?
   
-  // Status
   isActive      Boolean  @default(true)
   lastActivityAt DateTime @default(now())
   expiresAt     DateTime
@@ -263,12 +237,11 @@ model Session {
   createdAt     DateTime @default(now())
 
   @@index([userId])
-  @@index([token])
   @@index([expiresAt])
   @@map("sessions")
 }
 
-// ============ ORGANIZATION & MULTI-TENANCY ============
+// ============ ORGANIZATION ============
 
 model Organization {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -279,13 +252,11 @@ model Organization {
   favicon           String?
   description       String?
   
-  // Company Info
   industry          String?
-  size              String?  // 1-10, 11-50, 51-200, 201-500, 500+
+  size              String?
   country           String?
   website           String?
   
-  // Subscription
   tier              SubscriptionTier @default(FREE)
   billingEmail      String
   taxId             String?
@@ -295,26 +266,20 @@ model Organization {
   subscriptionStatus String?
   trialEndsAt       DateTime?
   
-  // Limits (based on tier)
-  limits            Json     @default("{\"projects\": 5, \"users\": 3, \"storage\": 1073741824, \"apiCalls\": 1000, \"aiCredits\": 100}")
-  features          String[] @default([]) // Enabled feature flags
+  limits            Json     @default("{\"projects\": 5, \"users\": 3, \"storage\": 1073741824}")
+  features          String[] @default([])
+  usage             Json     @default("{\"projects\": 0, \"users\": 0, \"storage\": 0}")
   
-  // Usage Tracking
-  usage             Json     @default("{\"projects\": 0, \"users\": 0, \"storage\": 0, \"apiCallsThisMonth\": 0, \"aiCreditsUsed\": 0}")
-  
-  // Settings
-  settings          Json?    // Organization-wide settings
+  settings          Json?
   allowedDomains    String[] @default([])
   ssoEnabled        Boolean  @default(false)
-  ssoConfig         Json?    // SAML/OIDC configuration
-  auditLogRetention Int      @default(90) // Days
+  ssoConfig         Json?
+  auditLogRetention Int      @default(90)
   
-  // White-label
   brandingEnabled   Boolean  @default(false)
-  brandingConfig    Json?    // Custom colors, logo, etc.
+  brandingConfig    Json?
   customDomain      String?
   
-  // Relations
   users             User[]
   projects          Project[]
   themes            Theme[]
@@ -323,19 +288,13 @@ model Organization {
   invitations       Invitation[]
   departments       Department[]
   
-  // Audit
   createdBy         String?  @db.ObjectId
-  
-  // Metadata
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   deletedAt         DateTime?
   metadata          Json?
 
-  @@index([slug])
   @@index([tier])
-  @@index([domain])
-  @@fulltext([name, description])
   @@map("organizations")
 }
 
@@ -346,14 +305,13 @@ model Department {
   
   name            String
   description     String?
-  parentId        String?  @db.ObjectId // For hierarchy
+  parentId        String?  @db.ObjectId
   costCenter      String?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@unique([organizationId, name])
-  @@index([organizationId])
   @@map("departments")
 }
 
@@ -373,8 +331,7 @@ model Invitation {
   invitedBy       String   @db.ObjectId
   inviter         User     @relation("InvitationSender", fields: [invitedBy], references: [id])
   
-  message         String?  // Personal message from inviter
-  
+  message         String?
   expiresAt       DateTime
   acceptedAt      DateTime?
   
@@ -382,13 +339,10 @@ model Invitation {
   updatedAt       DateTime @updatedAt
 
   @@unique([organizationId, email])
-  @@index([organizationId])
-  @@index([email])
-  @@index([token])
   @@map("invitations")
 }
 
-// ============ PROJECT MANAGEMENT ============
+// ============ PROJECT ============
 
 model Project {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -397,90 +351,69 @@ model Project {
   subdomain         String   @unique
   customDomain      String?  @unique
 
-  // Owner
   userId            String   @db.ObjectId
   user              User     @relation(fields: [userId], references: [id])
   organizationId    String   @db.ObjectId
   organization      Organization @relation(fields: [organizationId], references: [id])
 
-  // Status
   status            ProjectStatus @default(DRAFT)
   isPublished       Boolean  @default(false)
   publishedAt       DateTime?
   reviewNotes       String?
   reviewedBy        String?  @db.ObjectId
 
-  // Architecture (from Agent Don)
   architecture      Json?
   architectureVersion Int    @default(1)
-
-  // Design (from Agent Jessica)
   design            Json?
   designVersion     Int      @default(1)
-
-  // Code (from Agent Mark)
   codeFiles         Json?
   dependencies      Json?
   codeVersion       Int      @default(1)
 
-  // Clone Info (from Agent Sherlock)
   clonedFrom        String?
   cloneAnalysis     Json?
   cloneUrl          String?
 
-  // Deployment Configuration
   deploymentUrl     String?
   deploymentEnv     DeploymentEnvironment @default(PRODUCTION)
   sslEnabled        Boolean  @default(false)
   cdnEnabled        Boolean  @default(false)
   cdnUrl            String?
   
-  // Performance & SEO
-  seoConfig         Json?    // title, description, keywords, ogImage
-  analyticsId       String?  // Google Analytics ID
-  performanceScore  Int?     // Lighthouse score
+  seoConfig         Json?
+  analyticsId       String?
+  performanceScore  Int?
 
-  // Version Control
   version           Int      @default(1)
   previousVersions  Json[]   @default([])
   gitRepoUrl        String?
   lastDeployedAt    DateTime?
   deploymentHistory Json[]   @default([])
 
-  // Collaboration
-  collaborators     Json[]   @default([]) // [{userId, role, addedAt}]
-  comments          Json[]   @default([]) // [{userId, text, createdAt}]
+  collaborators     Json[]   @default([])
+  comments          Json[]   @default([])
   
-  // Analytics
   views             Int      @default(0)
   uniqueVisitors    Int      @default(0)
   lastViewedAt      DateTime?
   analyticsData     Json?
-
-  // Settings
-  settings          Json?    // Project-specific settings
+  settings          Json?
   
-  // Relations
   interactionLogs   InteractionLog[]
   deployments       Deployment[]
   backups           ProjectBackup[]
 
-  // Audit
   createdBy         String?  @db.ObjectId
   updatedBy         String?  @db.ObjectId
   
-  // Metadata
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   deletedAt         DateTime?
   metadata          Json?
 
   @@index([organizationId, userId])
-  @@index([subdomain])
-  @@index([customDomain])
   @@index([status])
   @@index([isPublished])
-  @@fulltext([name, description])
   @@map("projects")
 }
 
@@ -491,21 +424,18 @@ model Deployment {
   
   version       Int
   environment   DeploymentEnvironment
-  status        String   // pending, building, deployed, failed, rolled_back
+  status        String
   url           String?
   
-  // Build info
   buildLogs     String?
-  buildDuration Int?     // in seconds
-  bundleSize    Int?     // in bytes
+  buildDuration Int?
+  bundleSize    Int?
   
-  // Rollback
   previousDeploymentId String? @db.ObjectId
   isRolledBack  Boolean  @default(false)
   
   deployedBy    String   @db.ObjectId
   deployedAt    DateTime @default(now())
-  
   createdAt     DateTime @default(now())
 
   @@index([projectId])
@@ -521,76 +451,60 @@ model ProjectBackup {
   version       Int
   name          String?
   description   String?
-  
-  // Backup data
-  data          Json     // Full project snapshot
-  size          Int      // in bytes
-  
-  // Type
-  type          String   @default("manual") // manual, auto, pre_deploy
+  data          Json
+  size          Int
+  type          String   @default("manual")
   
   createdBy     String   @db.ObjectId
   createdAt     DateTime @default(now())
   expiresAt     DateTime?
 
   @@index([projectId])
-  @@index([createdAt])
   @@map("project_backups")
 }
 
-// ============ AI AGENT INTERACTION ============
+// ============ AI INTERACTION ============
 
 model InteractionLog {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
 
-  // Context
   projectId       String   @db.ObjectId
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId          String   @db.ObjectId
   user            User     @relation(fields: [userId], references: [id])
   organizationId  String   @db.ObjectId
 
-  // Agent Details
   agentName       AgentName
   agentModel      String
   agentVersion    String?
   
-  // Request
   requestId       String   @unique @default(uuid())
   input           String
   inputTokens     Int      @default(0)
   systemPrompt    String?
-  
-  // Response
   output          Json
   outputTokens    Int      @default(0)
   
-  // Chain
   parentInteractionId String? @db.ObjectId
-  chainPosition   Int?     // Position in agent chain
+  chainPosition   Int?
 
-  // Metrics
   tokensUsed      Int
   latencyMs       Int
   cost            Float    @default(0.0)
   
-  // Status
   success         Boolean  @default(true)
   errorCode       String?
   errorMessage    String?
   retryCount      Int      @default(0)
   
-  // User Feedback
-  rating          Int?     // 1-5 stars
+  rating          Int?
   feedback        String?
   flagged         Boolean  @default(false)
   flagReason      String?
   
-  // A/B Testing
   experimentId    String?
   variant         String?
 
-  // Metadata
   timestamp       DateTime @default(now())
   ip              String?
   userAgent       String?
@@ -600,12 +514,11 @@ model InteractionLog {
   @@index([userId, timestamp])
   @@index([organizationId, timestamp])
   @@index([agentName, timestamp])
-  @@index([requestId])
   @@index([success])
   @@map("interaction_logs")
 }
 
-// ============ TEMPLATE MARKETPLACE ============
+// ============ TEMPLATE ============
 
 model Template {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -615,58 +528,46 @@ model Template {
   subcategory     String?
   type            String
 
-  // Content
   description     String?
   shortDescription String?
   templateData    Json
   
-  // Versioning
   version         String   @default("1.0.0")
-  changelog       Json[]   @default([]) // [{version, changes, date}]
+  changelog       Json[]   @default([])
   
-  // Author
   authorId        String?  @db.ObjectId
   authorName      String?
   authorAvatar    String?
   isOfficial      Boolean  @default(false)
 
-  // Status
   status          TemplateStatus @default(DRAFT)
   reviewNotes     String?
   reviewedBy      String?  @db.ObjectId
   reviewedAt      DateTime?
   
-  // Marketplace
   featured        Boolean  @default(false)
   featuredOrder   Int?
   price           Float    @default(0.0)
   currency        String   @default("USD")
   isPremium       Boolean  @default(false)
   
-  // Stats
   downloads       Int      @default(0)
   views           Int      @default(0)
   rating          Float    @default(0.0)
   ratingCount     Int      @default(0)
   
-  // Media
   previewImage    String?
   thumbnailImage  String?
   screenshots     String[] @default([])
   demoUrl         String?
   videoUrl        String?
 
-  // SEO
   tags            String[] @default([])
   keywords        String[] @default([])
-  
-  // License
   license         String   @default("MIT")
   
-  // Relations
   reviews         TemplateReview[]
 
-  // Metadata
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   publishedAt     DateTime?
@@ -677,7 +578,6 @@ model Template {
   @@index([featured])
   @@index([status])
   @@index([rating])
-  @@fulltext([name, description, tags])
   @@map("templates")
 }
 
@@ -690,25 +590,23 @@ model TemplateReview {
   userName    String?
   userAvatar  String?
   
-  rating      Int      // 1-5
+  rating      Int
   title       String?
   content     String
   
   helpful     Int      @default(0)
   notHelpful  Int      @default(0)
-  
-  isVerified  Boolean  @default(false) // Verified purchase
+  isVerified  Boolean  @default(false)
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([templateId, userId])
   @@index([templateId])
-  @@index([rating])
   @@map("template_reviews")
 }
 
-// ============ THEME SYSTEM ============
+// ============ THEME ============
 
 model Theme {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -716,32 +614,26 @@ model Theme {
   organizationId  String   @db.ObjectId
   organization    Organization @relation(fields: [organizationId], references: [id])
 
-  // Generation Method
-  method          String   // create, clone, image, html
+  method          String
   sourceUrl       String?
   sourceImage     String?
   sourceHtml      String?
 
-  // Theme Data
-  colors          Json     // {primary, secondary, accent, background, text, etc.}
-  typography      Json     // {fontFamily, headings, body, etc.}
-  components      Json     // Component-specific styles
-  spacing         Json?    // Spacing scale
-  borderRadius    Json?    // Border radius scale
-  shadows         Json?    // Shadow definitions
+  colors          Json
+  typography      Json
+  components      Json
+  spacing         Json?
+  borderRadius    Json?
+  shadows         Json?
   
-  // Generated Assets
   cssVariables    String?
   tailwindConfig  Json?
   
-  // Metadata
   industry        String?
-  style           String?  // modern, classic, minimal, bold, etc.
-  mood            String?  // professional, playful, elegant, etc.
+  style           String?
+  mood            String?
   isActive        Boolean  @default(false)
   isDefault       Boolean  @default(false)
-  
-  // Sharing
   isPublic        Boolean  @default(false)
   shareToken      String?
 
@@ -750,22 +642,17 @@ model Theme {
   updatedAt       DateTime @updatedAt
 
   @@index([organizationId])
-  @@index([isPublic])
   @@map("themes")
 }
 
-// ============ SYSTEM CONFIGURATION ============
+// ============ SYSTEM ============
 
 model SystemConfig {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   key       String   @unique
   value     Json
-  
-  // Categorization
   category  String?
   description String?
-  
-  // Audit
   updatedBy String?  @db.ObjectId
   updatedAt DateTime @updatedAt
 
@@ -778,14 +665,10 @@ model FeatureFlag {
   key         String   @unique
   name        String
   description String?
-  
   status      FeatureFlagStatus @default(DISABLED)
-  percentage  Int?     // For percentage rollout
-  userList    String[] @default([]) // For user-specific rollout
-  
-  // Targeting
+  percentage  Int?
+  userList    String[] @default([])
   tiers       SubscriptionTier[] @default([])
-  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -796,13 +679,10 @@ model MaintenanceWindow {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String?
-  
   startTime   DateTime
   endTime     DateTime
-  
   isActive    Boolean  @default(false)
-  message     String?  // Message to display to users
-  
+  message     String?
   createdBy   String   @db.ObjectId
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -810,34 +690,30 @@ model MaintenanceWindow {
   @@map("maintenance_windows")
 }
 
-// ============ AUDIT & ACTIVITY ============
+// ============ AUDIT ============
 
 model ActivityLog {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   
-  // Actor
   userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
   userEmail   String
   organizationId String? @db.ObjectId
   
-  // Action
-  action      String   // CREATE, UPDATE, DELETE, LOGIN, etc.
-  category    String?  // user, project, organization, system
+  action      String
+  category    String?
   resource    String?
   resourceId  String?
   
-  // Details
-  details     Json?    // Additional action details
-  changes     Json?    // Before/after for updates
+  details     Json?
+  changes     Json?
   
-  // Context
   ip          String?
   userAgent   String?
   location    Json?
   sessionId   String?
   requestId   String?
   
-  // Compliance
   sensitiveDataAccessed Boolean @default(false)
   exportable  Boolean  @default(true)
   
@@ -846,43 +722,36 @@ model ActivityLog {
   @@index([userId, timestamp])
   @@index([organizationId, timestamp])
   @@index([action, timestamp])
-  @@index([resource, resourceId])
   @@map("activity_logs")
 }
 
-// ============ API & WEBHOOKS ============
+// ============ API ============
 
 model ApiKey {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
   name            String
   description     String?
   
-  // Key (prefix shown, hash stored)
-  keyPrefix       String   // First 8 chars for identification
-  keyHash         String   // SHA256 hash of full key
+  keyPrefix       String
+  keyHash         String
   
-  // Ownership
   organizationId  String   @db.ObjectId
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId          String   @db.ObjectId
   user            User     @relation(fields: [userId], references: [id])
   
-  // Permissions
   scopes          String[] @default(["read"])
   allowedIps      String[] @default([])
   allowedOrigins  String[] @default([])
   
-  // Rate Limiting
   rateLimit       Int      @default(1000)
-  rateLimitWindow Int      @default(60000) // milliseconds
+  rateLimitWindow Int      @default(60000)
   
-  // Usage
   lastUsedAt      DateTime?
   lastUsedIp      String?
   usageCount      Int      @default(0)
   usageThisMonth  Int      @default(0)
   
-  // Status
   isActive        Boolean  @default(true)
   expiresAt       DateTime?
   revokedAt       DateTime?
@@ -895,7 +764,6 @@ model ApiKey {
   @@index([organizationId])
   @@index([userId])
   @@index([keyPrefix])
-  @@index([keyHash])
   @@map("api_keys")
 }
 
@@ -908,28 +776,21 @@ model Webhook {
   organizationId  String   @db.ObjectId
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
-  // Events
   events          WebhookEvent[]
+  secret          String
+  headers         Json?
   
-  // Security
-  secret          String   // For signature verification
-  headers         Json?    // Custom headers to include
-  
-  // Status
   isActive        Boolean  @default(true)
   isPaused        Boolean  @default(false)
   
-  // Delivery
   lastTriggeredAt DateTime?
   lastResponseCode Int?
   lastResponseBody String?
   
-  // Health
   failureCount    Int      @default(0)
   consecutiveFailures Int  @default(0)
-  disabledAt      DateTime? // Auto-disabled after failures
+  disabledAt      DateTime?
   
-  // Retry
   maxRetries      Int      @default(3)
   retryDelayMs    Int      @default(1000)
 
@@ -937,7 +798,6 @@ model Webhook {
   updatedAt       DateTime @updatedAt
 
   @@index([organizationId])
-  @@index([isActive])
   @@map("webhooks")
 }
 
@@ -948,12 +808,10 @@ model WebhookDelivery {
   event       WebhookEvent
   payload     Json
   
-  // Response
   statusCode  Int?
   responseBody String?
-  responseTime Int?    // milliseconds
+  responseTime Int?
   
-  // Status
   success     Boolean  @default(false)
   error       String?
   attempts    Int      @default(1)
@@ -961,7 +819,6 @@ model WebhookDelivery {
   deliveredAt DateTime @default(now())
 
   @@index([webhookId])
-  @@index([deliveredAt])
   @@map("webhook_deliveries")
 }
 
@@ -972,20 +829,17 @@ model Notification {
   userId      String   @db.ObjectId
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  type        String   // info, success, warning, error, system
-  category    String?  // project, billing, security, etc.
+  type        String
+  category    String?
   title       String
   message     String
   
-  // Link
   actionUrl   String?
   actionLabel String?
   
-  // Status
   isRead      Boolean  @default(false)
   readAt      DateTime?
   
-  // Delivery
   emailSent   Boolean  @default(false)
   pushSent    Boolean  @default(false)
   
@@ -1001,14 +855,10 @@ model Notification {
 
 model RateLimitRecord {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  
-  key         String   // userId:endpoint or ip:endpoint
+  key         String
   endpoint    String
-  
   count       Int      @default(1)
   windowStart DateTime @default(now())
-  
-  // TTL index will auto-delete
   expiresAt   DateTime
 
   @@unique([key, endpoint])
@@ -1016,22 +866,18 @@ model RateLimitRecord {
   @@map("rate_limit_records")
 }
 
-// ============ EMAIL TEMPLATES ============
+// ============ EMAIL ============
 
 model EmailTemplate {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  key         String   @unique // welcome, password_reset, invoice, etc.
+  key         String   @unique
   name        String
   description String?
-  
   subject     String
   htmlBody    String
   textBody    String?
-  
-  variables   String[] @default([]) // Available template variables
-  
+  variables   String[] @default([])
   isActive    Boolean  @default(true)
-  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

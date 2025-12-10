@@ -312,10 +312,10 @@ Always respond with JSON containing:
     const lowerText = text.toLowerCase();
 
     // Intent patterns
-    const patterns: Array<{ intent: string; patterns: RegExp[]; confidence: number }> = [
+    const intentPatterns: Array<{ intent: string; regexPatterns: RegExp[]; confidence: number }> = [
       {
         intent: 'create_project',
-        patterns: [
+        regexPatterns: [
           /create|build|make|start|new/i,
           /website|site|page|app|application/i,
         ],
@@ -323,7 +323,7 @@ Always respond with JSON containing:
       },
       {
         intent: 'modify_design',
-        patterns: [
+        regexPatterns: [
           /change|modify|update|edit|adjust/i,
           /color|font|style|design|layout|theme/i,
         ],
@@ -331,7 +331,7 @@ Always respond with JSON containing:
       },
       {
         intent: 'add_section',
-        patterns: [
+        regexPatterns: [
           /add|include|insert|put/i,
           /section|component|feature|element|block/i,
         ],
@@ -339,7 +339,7 @@ Always respond with JSON containing:
       },
       {
         intent: 'clone_website',
-        patterns: [
+        regexPatterns: [
           /clone|copy|replicate|like|similar/i,
           /from|website|site|page/i,
         ],
@@ -347,38 +347,38 @@ Always respond with JSON containing:
       },
       {
         intent: 'deploy',
-        patterns: [
+        regexPatterns: [
           /deploy|publish|launch|go live|release/i,
         ],
         confidence: 0.95,
       },
       {
         intent: 'export',
-        patterns: [
+        regexPatterns: [
           /export|download|save|get code/i,
         ],
         confidence: 0.9,
       },
       {
         intent: 'help',
-        patterns: [
+        regexPatterns: [
           /help|how|what|can you|explain/i,
         ],
         confidence: 0.8,
       },
       {
         intent: 'navigation',
-        patterns: [
+        regexPatterns: [
           /show|go to|open|navigate|view/i,
         ],
         confidence: 0.85,
       },
     ];
 
-    for (const { intent, patterns, confidence } of patterns) {
-      const matchCount = patterns.filter(p => p.test(lowerText)).length;
-      if (matchCount >= Math.ceil(patterns.length / 2)) {
-        return { intent, confidence: confidence * (matchCount / patterns.length) };
+    for (const { intent, regexPatterns, confidence } of intentPatterns) {
+      const matchCount = regexPatterns.filter(p => p.test(lowerText)).length;
+      if (matchCount >= Math.ceil(regexPatterns.length / 2)) {
+        return { intent, confidence: confidence * (matchCount / regexPatterns.length) };
       }
     }
 

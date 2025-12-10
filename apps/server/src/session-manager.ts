@@ -193,16 +193,16 @@ export class SessionManager {
 
   async getSession(sessionId: string): Promise<VoiceSession | null> {
     // Try memory first
-    let session = this.sessions.get(sessionId);
-    if (session) return session;
+    const memorySession = this.sessions.get(sessionId);
+    if (memorySession) return memorySession;
 
     // Try Redis
     const key = `${this.KEY_PREFIX}${sessionId}`;
     const data = await this.redis.get(key);
     if (data) {
-      session = JSON.parse(data);
+      const session: VoiceSession = JSON.parse(data);
       // Restore non-serializable properties
-      session!.connection.websocket = null as any;
+      session.connection.websocket = null as any;
       return session;
     }
 

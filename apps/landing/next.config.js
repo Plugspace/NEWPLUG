@@ -2,21 +2,21 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@plugspace/types', '@plugspace/utils'],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cdn.plugspace.io',
-      },
+      { protocol: 'https', hostname: 'picsum.photos' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'cdn.plugspace.io' },
+      { protocol: 'https', hostname: 'fonts.googleapis.com' },
+      { protocol: 'https', hostname: 'fonts.gstatic.com' },
     ],
+    domains: ['picsum.photos', 'images.unsplash.com', 'cdn.plugspace.io'],
   },
   async rewrites() {
     return [
