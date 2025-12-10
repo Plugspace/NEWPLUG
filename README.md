@@ -11,12 +11,13 @@ Plugspace Titan is a production-ready, enterprise-grade platform for building we
 ## ✨ Features
 
 - **🎤 Voice-First Development** - Build websites by speaking naturally
-- **🤖 AI-Powered Agents** - Five specialized AI agents work together:
-  - **Don** (Architect) - Designs project architecture
-  - **Mark** (Developer) - Writes production-ready code
-  - **Jessica** (Designer) - Creates stunning design systems
-  - **Sherlock** (Analyzer) - Clones and analyzes existing websites
-  - **Zara** (Assistant) - Handles voice commands and chat
+- **🤖 Dual-LLM AI Agents** - Four specialized AI agents with advanced orchestration:
+  - **Don** (Architect) - Claude Sonnet 4.5 powered architecture generation
+  - **Jessica** (Designer) - Gemini 3.0 Pro visual intelligence for design systems
+  - **Mark** (Engineer) - Claude Sonnet 4.5 production-ready code generation
+  - **Sherlock** (Analyst) - Gemini 3.0 Pro website analysis and cloning
+- **🧠 Intelligent Suggestions** - AI-powered design improvement recommendations
+- **📊 Queue Management** - Redis-based task orchestration with BullMQ
 - **🎨 Beautiful Templates** - 100+ professionally designed templates
 - **🚀 One-Click Publishing** - Deploy instantly with SSL and CDN
 - **🔒 Enterprise Security** - SOC2 and GDPR compliant
@@ -304,6 +305,9 @@ Detailed documentation is available in the `/docs` directory:
 - **[API Reference](docs/API.md)** - Complete API documentation
 - **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[Security](docs/SECURITY.md)** - Security practices and compliance
+- **[AI Agents](docs/AGENTS.md)** - Dual-LLM agent architecture and usage
+- **[Prompts](docs/PROMPTS.md)** - Prompt engineering guide
+- **[Queue System](docs/QUEUE.md)** - Task queue documentation
 
 ## 📊 Monitoring
 
