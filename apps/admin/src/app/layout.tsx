@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import './globals.css';
+import '../globals.css';
 import { TRPCProvider } from '@/lib/trpc';
 
 export const metadata: Metadata = {
-  title: 'Plugspace.io - Voice-First AI Website Builder',
-  description: 'Build beautiful websites with your voice. Powered by AI.',
+  title: 'Plugspace Admin - Master Dashboard',
+  description: 'Master Admin Dashboard for Plugspace.io',
 };
 
-export default function RootLayout({
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;

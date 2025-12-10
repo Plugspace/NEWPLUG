@@ -1,7 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
-
 interface CategoryPillsProps {
   categories: string[];
   selected: string;
@@ -14,15 +12,15 @@ export default function CategoryPills({
   onSelect,
 }: CategoryPillsProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
       {categories.map((category) => (
         <button
           key={category}
           onClick={() => onSelect(category)}
-          className={`px-4 py-2 rounded-full whitespace-nowrap transition-all ${
+          className={`px-4 py-2 rounded-full whitespace-nowrap transition-all border ${
             selected === category
-              ? 'bg-[#8b5cf6] text-white'
-              : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              ? 'border-[#8b5cf6] text-[#8b5cf6] bg-[rgba(139,92,246,0.1)]'
+              : 'border-[#27272a] text-[#a1a1aa] hover:border-[#8b5cf6] hover:text-[#8b5cf6]'
           }`}
         >
           {category}

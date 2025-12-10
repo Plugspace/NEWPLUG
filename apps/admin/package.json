@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@plugspace/shared": "workspace:*",
+    "@plugspace/ui": "workspace:*",
     "@trpc/client": "^10.45.0",
     "@trpc/next": "^10.45.0",
     "@trpc/react-query": "^10.45.0",

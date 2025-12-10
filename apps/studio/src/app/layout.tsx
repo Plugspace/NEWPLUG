@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import './globals.css';
+import '../globals.css';
 import { TRPCProvider } from '@/lib/trpc';
 
 export const metadata: Metadata = {
-  title: 'Plugspace.io - Voice-First AI Website Builder',
-  description: 'Build beautiful websites with your voice. Powered by AI.',
+  title: 'Plugspace Studio - Build Your Website',
+  description: 'Voice-first AI website builder',
 };
 
-export default function RootLayout({
+export default function StudioLayout({
   children,
 }: {
   children: React.ReactNode;
