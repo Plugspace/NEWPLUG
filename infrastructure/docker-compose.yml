@@ -1,0 +1,40 @@
+# Plugspace.io Titan v1.4 - Docker Compose for Development
+# Production should use managed services (MongoDB Atlas, Redis Cloud)
+
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: plugspace-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-plugspace}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - plugspace-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: plugspace-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    networks:
+      - plugspace-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  plugspace-network:
+    driver: bridge

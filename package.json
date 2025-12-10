@@ -1,0 +1,28 @@
+{
+  "name": "plugspace-titan-v1.4",
+  "version": "1.4.0",
+  "description": "Plugspace.io Titan v1.4 - Enterprise Voice-First AI Coding Platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "db:generate": "cd packages/db && pnpm prisma generate",
+    "db:migrate": "cd packages/db && pnpm prisma migrate dev",
+    "db:studio": "cd packages/db && pnpm prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
