@@ -1,0 +1,327 @@
+# ==============================================
+# PLUGSPACE.IO TITAN v1.4 - ALERT RULES
+# ==============================================
+# Prometheus alerting rules for monitoring
+# ==============================================
+
+groups:
+  # ===========================================
+  # INFRASTRUCTURE ALERTS
+  # ===========================================
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% (current: {{ $value | printf \"%.2f\" }}%)"
+          runbook_url: "https://docs.plugspace.io/runbook/high-cpu"
+
+      # Critical CPU Usage
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% (current: {{ $value | printf \"%.2f\" }}%)"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% (current: {{ $value | printf \"%.2f\" }}%)"
+
+      # Critical Memory Usage
+      - alert: CriticalMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 95% (current: {{ $value | printf \"%.2f\" }}%)"
+
+      # Low Disk Space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space is below 15% (available: {{ $value | printf \"%.2f\" }}%)"
+
+      # Critical Disk Space
+      - alert: CriticalDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk space is below 5% - IMMEDIATE ACTION REQUIRED"
+
+  # ===========================================
+  # APPLICATION ALERTS
+  # ===========================================
+  - name: application
+    interval: 30s
+    rules:
+      # Service Down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute"
+          runbook_url: "https://docs.plugspace.io/runbook/service-down"
+
+      # High Response Time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is above 1 second (current: {{ $value | printf \"%.2f\" }}s)"
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% (current: {{ $value | humanizePercentage }})"
+
+      # Critical Error Rate
+      - alert: CriticalErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is above 10% - IMMEDIATE ATTENTION REQUIRED"
+
+      # High Request Rate
+      - alert: HighRequestRate
+        expr: sum(rate(http_requests_total[1m])) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "High request rate detected"
+          description: "Request rate is above 1000 req/s (current: {{ $value | printf \"%.0f\" }})"
+
+  # ===========================================
+  # DATABASE ALERTS
+  # ===========================================
+  - name: database
+    interval: 30s
+    rules:
+      # MongoDB Down
+      - alert: MongoDBDown
+        expr: mongodb_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "MongoDB is down"
+          description: "MongoDB instance is not responding"
+          runbook_url: "https://docs.plugspace.io/runbook/mongodb-down"
+
+      # MongoDB High Connections
+      - alert: MongoDBHighConnections
+        expr: mongodb_connections_current / mongodb_connections_available * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "MongoDB high connection usage"
+          description: "MongoDB connections are above 80% (current: {{ $value | printf \"%.2f\" }}%)"
+
+      # MongoDB Replication Lag
+      - alert: MongoDBReplicationLag
+        expr: mongodb_mongod_replset_member_replication_lag > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "MongoDB replication lag detected"
+          description: "Replication lag is {{ $value | printf \"%.0f\" }} seconds"
+
+      # Redis Down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance is not responding"
+          runbook_url: "https://docs.plugspace.io/runbook/redis-down"
+
+      # Redis High Memory
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is above 90%"
+
+  # ===========================================
+  # SSL/TLS ALERTS
+  # ===========================================
+  - name: ssl
+    interval: 1h
+    rules:
+      # SSL Certificate Expiring Soon
+      - alert: SSLCertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | printf \"%.0f\" }} days"
+
+      # SSL Certificate Expiring Critical
+      - alert: SSLCertificateExpiringCritical
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 7
+        for: 1h
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "SSL certificate expiring very soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | printf \"%.0f\" }} days - RENEW IMMEDIATELY"
+
+  # ===========================================
+  # NGINX ALERTS
+  # ===========================================
+  - name: nginx
+    interval: 30s
+    rules:
+      # Nginx Down
+      - alert: NginxDown
+        expr: nginx_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Nginx is down"
+          description: "Nginx server is not responding"
+
+      # High Nginx Connections
+      - alert: HighNginxConnections
+        expr: nginx_connections_active > 5000
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High number of Nginx connections"
+          description: "Active Nginx connections: {{ $value }}"
+
+  # ===========================================
+  # VOICE SERVER ALERTS
+  # ===========================================
+  - name: voice
+    interval: 30s
+    rules:
+      # Voice Server Down
+      - alert: VoiceServerDown
+        expr: up{job="plugspace-voice"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Voice server is down"
+          description: "Voice WebSocket server is not responding"
+
+      # High Voice Latency
+      - alert: HighVoiceLatency
+        expr: voice_session_latency_seconds > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "High voice latency detected"
+          description: "Voice session latency is {{ $value | printf \"%.2f\" }}s (target: <0.5s)"
+
+      # Voice Session Errors
+      - alert: VoiceSessionErrors
+        expr: rate(voice_session_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Voice session errors detected"
+          description: "Voice session error rate is elevated"
+
+  # ===========================================
+  # QUEUE ALERTS
+  # ===========================================
+  - name: queue
+    interval: 30s
+    rules:
+      # Queue Backlog
+      - alert: QueueBacklog
+        expr: bullmq_queue_waiting > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Queue backlog detected"
+          description: "Queue {{ $labels.queue }} has {{ $value }} waiting jobs"
+
+      # Queue Failed Jobs
+      - alert: QueueFailedJobs
+        expr: increase(bullmq_queue_failed[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Queue failed jobs increasing"
+          description: "Queue {{ $labels.queue }} has {{ $value }} failed jobs in last 5 minutes"

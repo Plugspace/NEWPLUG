@@ -1,0 +1,48 @@
+# ==============================================
+# PLUGSPACE.IO TITAN v1.4 - STUDIO DOCKERFILE
+# ==============================================
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY packages/types/package.json ./packages/types/
+COPY packages/utils/package.json ./packages/utils/
+COPY apps/studio/package.json ./apps/studio/
+RUN npm ci --legacy-peer-deps
+
+# Build the application
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build packages
+RUN npm run build --workspace=@plugspace/types
+RUN npm run build --workspace=@plugspace/utils
+
+# Build Next.js app
+ENV NEXT_TELEMETRY_DISABLED 1
+RUN npm run build --workspace=@plugspace/studio
+
+# Production image
+FROM base AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/apps/studio/public ./apps/studio/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/studio/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/studio/.next/static ./apps/studio/.next/static
+
+USER nextjs
+
+EXPOSE 3001
+ENV PORT 3001
+ENV HOSTNAME "0.0.0.0"
+
+CMD ["node", "apps/studio/server.js"]

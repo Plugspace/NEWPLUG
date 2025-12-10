@@ -1,0 +1,1039 @@
+// ==============================================
+// PLUGSPACE.IO TITAN v1.4 - ENTERPRISE DATABASE SCHEMA
+// ==============================================
+// Production-ready MongoDB schema with:
+// - Multi-tenant architecture
+// - Comprehensive user management
+// - Full audit trails
+// - Enterprise security features
+// ==============================================
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../generated/client"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  USER
+  STUDIO_ADMIN
+  MASTER_ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AgentName {
+  DON
+  MARK
+  JESSICA
+  SHERLOCK
+  ZARA
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  DELETED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum TemplateStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum MfaMethod {
+  TOTP
+  SMS
+  EMAIL
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+  MICROSOFT
+  LINKEDIN
+}
+
+enum WebhookEvent {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_PUBLISHED
+  PROJECT_DELETED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  SUBSCRIPTION_CHANGED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+}
+
+enum FeatureFlagStatus {
+  ENABLED
+  DISABLED
+  PERCENTAGE
+  USER_LIST
+}
+
+enum DeploymentEnvironment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+// ============ USER MANAGEMENT ============
+
+model User {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  firebaseUid     String   @unique
+  email           String   @unique
+  displayName     String?
+  photoURL        String?
+  role            Role     @default(USER)
+
+  // Profile
+  firstName       String?
+  lastName        String?
+  phone           String?
+  bio             String?
+  timezone        String   @default("UTC")
+  language        String   @default("en")
+  preferences     Json?    // User preferences (theme, notifications, etc.)
+  avatarColor     String?  // For generated avatars
+
+  // Account Status
+  status          AccountStatus @default(PENDING)
+  emailVerified   Boolean  @default(false)
+  phoneVerified   Boolean  @default(false)
+  verificationToken String?
+  verificationExpiry DateTime?
+  onboardingCompleted Boolean @default(false)
+
+  // Security - MFA
+  mfaEnabled      Boolean  @default(false)
+  mfaMethods      MfaMethod[] @default([])
+  mfaSecret       String?  // TOTP secret
+  backupCodes     String[] @default([]) // Encrypted backup codes
+  mfaRecoveryEmail String?
+
+  // Security - Login Tracking
+  lastLoginAt     DateTime?
+  lastLoginIP     String?
+  lastLoginUserAgent String?
+  lastLoginLocation Json?  // { country, city, lat, lng }
+  loginAttempts   Int      @default(0)
+  lockedUntil     DateTime?
+  passwordChangedAt DateTime?
+  securityQuestions Json? // Encrypted security Q&A
+
+  // OAuth Providers
+  oauthProviders  OAuthConnection[]
+
+  // Organization Membership
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  teamRole        String?  // Custom role within organization
+  department      String?
+  title           String?
+
+  // Subscription & Billing
+  stripeCustomerId    String?
+  subscriptionTier    SubscriptionTier @default(FREE)
+  subscriptionStatus  String?  // active, past_due, cancelled, etc.
+  billingCycle        BillingCycle?
+  trialEndsAt         DateTime?
+  creditsRemaining    Int      @default(100)
+  creditsUsedThisMonth Int     @default(0)
+
+  // API Access
+  apiKeys           ApiKey[]
+  
+  // Sessions
+  sessions          Session[]
+
+  // Relations
+  projects          Project[]
+  interactionLogs   InteractionLog[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
+  invitationsSent   Invitation[]    @relation("InvitationSender")
+
+  // Audit
+  createdBy       String?  @db.ObjectId
+  updatedBy       String?  @db.ObjectId
+  deletedBy       String?  @db.ObjectId
+  
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+  metadata        Json?    // Additional metadata
+
+  @@index([organizationId, email])
+  @@index([firebaseUid])
+  @@index([status])
+  @@index([subscriptionTier])
+  @@fulltext([email, displayName, firstName, lastName])
+  @@map("users")
+}
+
+model OAuthConnection {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  provider    OAuthProvider
+  providerId  String   // Provider's user ID
+  email       String?
+  displayName String?
+  avatarUrl   String?
+  accessToken String?  // Encrypted
+  refreshToken String? // Encrypted
+  tokenExpiry DateTime?
+  scope       String[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@map("oauth_connections")
+}
+
+model Session {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @db.ObjectId
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token         String   @unique
+  refreshToken  String?  @unique
+  
+  // Device info
+  deviceId      String?
+  deviceName    String?
+  deviceType    String?  // desktop, mobile, tablet
+  browser       String?
+  os            String?
+  
+  // Location
+  ip            String?
+  location      Json?
+  
+  // Status
+  isActive      Boolean  @default(true)
+  lastActivityAt DateTime @default(now())
+  expiresAt     DateTime
+  
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ============ ORGANIZATION & MULTI-TENANCY ============
+
+model Organization {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  slug              String   @unique
+  domain            String?  @unique
+  logo              String?
+  favicon           String?
+  description       String?
+  
+  // Company Info
+  industry          String?
+  size              String?  // 1-10, 11-50, 51-200, 201-500, 500+
+  country           String?
+  website           String?
+  
+  // Subscription
+  tier              SubscriptionTier @default(FREE)
+  billingEmail      String
+  taxId             String?
+  stripeCustomerId  String?
+  stripeSubscriptionId String?
+  billingCycle      BillingCycle @default(MONTHLY)
+  subscriptionStatus String?
+  trialEndsAt       DateTime?
+  
+  // Limits (based on tier)
+  limits            Json     @default("{\"projects\": 5, \"users\": 3, \"storage\": 1073741824, \"apiCalls\": 1000, \"aiCredits\": 100}")
+  features          String[] @default([]) // Enabled feature flags
+  
+  // Usage Tracking
+  usage             Json     @default("{\"projects\": 0, \"users\": 0, \"storage\": 0, \"apiCallsThisMonth\": 0, \"aiCreditsUsed\": 0}")
+  
+  // Settings
+  settings          Json?    // Organization-wide settings
+  allowedDomains    String[] @default([])
+  ssoEnabled        Boolean  @default(false)
+  ssoConfig         Json?    // SAML/OIDC configuration
+  auditLogRetention Int      @default(90) // Days
+  
+  // White-label
+  brandingEnabled   Boolean  @default(false)
+  brandingConfig    Json?    // Custom colors, logo, etc.
+  customDomain      String?
+  
+  // Relations
+  users             User[]
+  projects          Project[]
+  themes            Theme[]
+  apiKeys           ApiKey[]
+  webhooks          Webhook[]
+  invitations       Invitation[]
+  departments       Department[]
+  
+  // Audit
+  createdBy         String?  @db.ObjectId
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+  metadata          Json?
+
+  @@index([slug])
+  @@index([tier])
+  @@index([domain])
+  @@fulltext([name, description])
+  @@map("organizations")
+}
+
+model Department {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  parentId        String?  @db.ObjectId // For hierarchy
+  costCenter      String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+model Invitation {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  email           String
+  role            Role     @default(USER)
+  teamRole        String?
+  department      String?
+  
+  token           String   @unique
+  status          InvitationStatus @default(PENDING)
+  
+  invitedBy       String   @db.ObjectId
+  inviter         User     @relation("InvitationSender", fields: [invitedBy], references: [id])
+  
+  message         String?  // Personal message from inviter
+  
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([email])
+  @@index([token])
+  @@map("invitations")
+}
+
+// ============ PROJECT MANAGEMENT ============
+
+model Project {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  description       String?
+  subdomain         String   @unique
+  customDomain      String?  @unique
+
+  // Owner
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id])
+  organizationId    String   @db.ObjectId
+  organization      Organization @relation(fields: [organizationId], references: [id])
+
+  // Status
+  status            ProjectStatus @default(DRAFT)
+  isPublished       Boolean  @default(false)
+  publishedAt       DateTime?
+  reviewNotes       String?
+  reviewedBy        String?  @db.ObjectId
+
+  // Architecture (from Agent Don)
+  architecture      Json?
+  architectureVersion Int    @default(1)
+
+  // Design (from Agent Jessica)
+  design            Json?
+  designVersion     Int      @default(1)
+
+  // Code (from Agent Mark)
+  codeFiles         Json?
+  dependencies      Json?
+  codeVersion       Int      @default(1)
+
+  // Clone Info (from Agent Sherlock)
+  clonedFrom        String?
+  cloneAnalysis     Json?
+  cloneUrl          String?
+
+  // Deployment Configuration
+  deploymentUrl     String?
+  deploymentEnv     DeploymentEnvironment @default(PRODUCTION)
+  sslEnabled        Boolean  @default(false)
+  cdnEnabled        Boolean  @default(false)
+  cdnUrl            String?
+  
+  // Performance & SEO
+  seoConfig         Json?    // title, description, keywords, ogImage
+  analyticsId       String?  // Google Analytics ID
+  performanceScore  Int?     // Lighthouse score
+
+  // Version Control
+  version           Int      @default(1)
+  previousVersions  Json[]   @default([])
+  gitRepoUrl        String?
+  lastDeployedAt    DateTime?
+  deploymentHistory Json[]   @default([])
+
+  // Collaboration
+  collaborators     Json[]   @default([]) // [{userId, role, addedAt}]
+  comments          Json[]   @default([]) // [{userId, text, createdAt}]
+  
+  // Analytics
+  views             Int      @default(0)
+  uniqueVisitors    Int      @default(0)
+  lastViewedAt      DateTime?
+  analyticsData     Json?
+
+  // Settings
+  settings          Json?    // Project-specific settings
+  
+  // Relations
+  interactionLogs   InteractionLog[]
+  deployments       Deployment[]
+  backups           ProjectBackup[]
+
+  // Audit
+  createdBy         String?  @db.ObjectId
+  updatedBy         String?  @db.ObjectId
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+  metadata          Json?
+
+  @@index([organizationId, userId])
+  @@index([subdomain])
+  @@index([customDomain])
+  @@index([status])
+  @@index([isPublished])
+  @@fulltext([name, description])
+  @@map("projects")
+}
+
+model Deployment {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  projectId     String   @db.ObjectId
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  version       Int
+  environment   DeploymentEnvironment
+  status        String   // pending, building, deployed, failed, rolled_back
+  url           String?
+  
+  // Build info
+  buildLogs     String?
+  buildDuration Int?     // in seconds
+  bundleSize    Int?     // in bytes
+  
+  // Rollback
+  previousDeploymentId String? @db.ObjectId
+  isRolledBack  Boolean  @default(false)
+  
+  deployedBy    String   @db.ObjectId
+  deployedAt    DateTime @default(now())
+  
+  createdAt     DateTime @default(now())
+
+  @@index([projectId])
+  @@index([deployedAt])
+  @@map("deployments")
+}
+
+model ProjectBackup {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  projectId     String   @db.ObjectId
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  version       Int
+  name          String?
+  description   String?
+  
+  // Backup data
+  data          Json     // Full project snapshot
+  size          Int      // in bytes
+  
+  // Type
+  type          String   @default("manual") // manual, auto, pre_deploy
+  
+  createdBy     String   @db.ObjectId
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime?
+
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("project_backups")
+}
+
+// ============ AI AGENT INTERACTION ============
+
+model InteractionLog {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Context
+  projectId       String   @db.ObjectId
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId          String   @db.ObjectId
+  user            User     @relation(fields: [userId], references: [id])
+  organizationId  String   @db.ObjectId
+
+  // Agent Details
+  agentName       AgentName
+  agentModel      String
+  agentVersion    String?
+  
+  // Request
+  requestId       String   @unique @default(uuid())
+  input           String
+  inputTokens     Int      @default(0)
+  systemPrompt    String?
+  
+  // Response
+  output          Json
+  outputTokens    Int      @default(0)
+  
+  // Chain
+  parentInteractionId String? @db.ObjectId
+  chainPosition   Int?     // Position in agent chain
+
+  // Metrics
+  tokensUsed      Int
+  latencyMs       Int
+  cost            Float    @default(0.0)
+  
+  // Status
+  success         Boolean  @default(true)
+  errorCode       String?
+  errorMessage    String?
+  retryCount      Int      @default(0)
+  
+  // User Feedback
+  rating          Int?     // 1-5 stars
+  feedback        String?
+  flagged         Boolean  @default(false)
+  flagReason      String?
+  
+  // A/B Testing
+  experimentId    String?
+  variant         String?
+
+  // Metadata
+  timestamp       DateTime @default(now())
+  ip              String?
+  userAgent       String?
+  metadata        Json?
+
+  @@index([projectId, timestamp])
+  @@index([userId, timestamp])
+  @@index([organizationId, timestamp])
+  @@index([agentName, timestamp])
+  @@index([requestId])
+  @@index([success])
+  @@map("interaction_logs")
+}
+
+// ============ TEMPLATE MARKETPLACE ============
+
+model Template {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  slug            String   @unique
+  category        String
+  subcategory     String?
+  type            String
+
+  // Content
+  description     String?
+  shortDescription String?
+  templateData    Json
+  
+  // Versioning
+  version         String   @default("1.0.0")
+  changelog       Json[]   @default([]) // [{version, changes, date}]
+  
+  // Author
+  authorId        String?  @db.ObjectId
+  authorName      String?
+  authorAvatar    String?
+  isOfficial      Boolean  @default(false)
+
+  // Status
+  status          TemplateStatus @default(DRAFT)
+  reviewNotes     String?
+  reviewedBy      String?  @db.ObjectId
+  reviewedAt      DateTime?
+  
+  // Marketplace
+  featured        Boolean  @default(false)
+  featuredOrder   Int?
+  price           Float    @default(0.0)
+  currency        String   @default("USD")
+  isPremium       Boolean  @default(false)
+  
+  // Stats
+  downloads       Int      @default(0)
+  views           Int      @default(0)
+  rating          Float    @default(0.0)
+  ratingCount     Int      @default(0)
+  
+  // Media
+  previewImage    String?
+  thumbnailImage  String?
+  screenshots     String[] @default([])
+  demoUrl         String?
+  videoUrl        String?
+
+  // SEO
+  tags            String[] @default([])
+  keywords        String[] @default([])
+  
+  // License
+  license         String   @default("MIT")
+  
+  // Relations
+  reviews         TemplateReview[]
+
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  publishedAt     DateTime?
+  deletedAt       DateTime?
+  metadata        Json?
+
+  @@index([category])
+  @@index([featured])
+  @@index([status])
+  @@index([rating])
+  @@fulltext([name, description, tags])
+  @@map("templates")
+}
+
+model TemplateReview {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  templateId  String   @db.ObjectId
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  userId      String   @db.ObjectId
+  userName    String?
+  userAvatar  String?
+  
+  rating      Int      // 1-5
+  title       String?
+  content     String
+  
+  helpful     Int      @default(0)
+  notHelpful  Int      @default(0)
+  
+  isVerified  Boolean  @default(false) // Verified purchase
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([templateId, userId])
+  @@index([templateId])
+  @@index([rating])
+  @@map("template_reviews")
+}
+
+// ============ THEME SYSTEM ============
+
+model Theme {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  // Generation Method
+  method          String   // create, clone, image, html
+  sourceUrl       String?
+  sourceImage     String?
+  sourceHtml      String?
+
+  // Theme Data
+  colors          Json     // {primary, secondary, accent, background, text, etc.}
+  typography      Json     // {fontFamily, headings, body, etc.}
+  components      Json     // Component-specific styles
+  spacing         Json?    // Spacing scale
+  borderRadius    Json?    // Border radius scale
+  shadows         Json?    // Shadow definitions
+  
+  // Generated Assets
+  cssVariables    String?
+  tailwindConfig  Json?
+  
+  // Metadata
+  industry        String?
+  style           String?  // modern, classic, minimal, bold, etc.
+  mood            String?  // professional, playful, elegant, etc.
+  isActive        Boolean  @default(false)
+  isDefault       Boolean  @default(false)
+  
+  // Sharing
+  isPublic        Boolean  @default(false)
+  shareToken      String?
+
+  createdBy       String?  @db.ObjectId
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([isPublic])
+  @@map("themes")
+}
+
+// ============ SYSTEM CONFIGURATION ============
+
+model SystemConfig {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  value     Json
+  
+  // Categorization
+  category  String?
+  description String?
+  
+  // Audit
+  updatedBy String?  @db.ObjectId
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@map("system_config")
+}
+
+model FeatureFlag {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  key         String   @unique
+  name        String
+  description String?
+  
+  status      FeatureFlagStatus @default(DISABLED)
+  percentage  Int?     // For percentage rollout
+  userList    String[] @default([]) // For user-specific rollout
+  
+  // Targeting
+  tiers       SubscriptionTier[] @default([])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model MaintenanceWindow {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  
+  startTime   DateTime
+  endTime     DateTime
+  
+  isActive    Boolean  @default(false)
+  message     String?  // Message to display to users
+  
+  createdBy   String   @db.ObjectId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("maintenance_windows")
+}
+
+// ============ AUDIT & ACTIVITY ============
+
+model ActivityLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Actor
+  userId      String   @db.ObjectId
+  userEmail   String
+  organizationId String? @db.ObjectId
+  
+  // Action
+  action      String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  category    String?  // user, project, organization, system
+  resource    String?
+  resourceId  String?
+  
+  // Details
+  details     Json?    // Additional action details
+  changes     Json?    // Before/after for updates
+  
+  // Context
+  ip          String?
+  userAgent   String?
+  location    Json?
+  sessionId   String?
+  requestId   String?
+  
+  // Compliance
+  sensitiveDataAccessed Boolean @default(false)
+  exportable  Boolean  @default(true)
+  
+  timestamp   DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([organizationId, timestamp])
+  @@index([action, timestamp])
+  @@index([resource, resourceId])
+  @@map("activity_logs")
+}
+
+// ============ API & WEBHOOKS ============
+
+model ApiKey {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String?
+  
+  // Key (prefix shown, hash stored)
+  keyPrefix       String   // First 8 chars for identification
+  keyHash         String   // SHA256 hash of full key
+  
+  // Ownership
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId          String   @db.ObjectId
+  user            User     @relation(fields: [userId], references: [id])
+  
+  // Permissions
+  scopes          String[] @default(["read"])
+  allowedIps      String[] @default([])
+  allowedOrigins  String[] @default([])
+  
+  // Rate Limiting
+  rateLimit       Int      @default(1000)
+  rateLimitWindow Int      @default(60000) // milliseconds
+  
+  // Usage
+  lastUsedAt      DateTime?
+  lastUsedIp      String?
+  usageCount      Int      @default(0)
+  usageThisMonth  Int      @default(0)
+  
+  // Status
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  revokedBy       String?  @db.ObjectId
+  revokeReason    String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([keyPrefix])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model Webhook {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String?
+  url             String
+  
+  organizationId  String   @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Events
+  events          WebhookEvent[]
+  
+  // Security
+  secret          String   // For signature verification
+  headers         Json?    // Custom headers to include
+  
+  // Status
+  isActive        Boolean  @default(true)
+  isPaused        Boolean  @default(false)
+  
+  // Delivery
+  lastTriggeredAt DateTime?
+  lastResponseCode Int?
+  lastResponseBody String?
+  
+  // Health
+  failureCount    Int      @default(0)
+  consecutiveFailures Int  @default(0)
+  disabledAt      DateTime? // Auto-disabled after failures
+  
+  // Retry
+  maxRetries      Int      @default(3)
+  retryDelayMs    Int      @default(1000)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  webhookId   String   @db.ObjectId
+  
+  event       WebhookEvent
+  payload     Json
+  
+  // Response
+  statusCode  Int?
+  responseBody String?
+  responseTime Int?    // milliseconds
+  
+  // Status
+  success     Boolean  @default(false)
+  error       String?
+  attempts    Int      @default(1)
+  
+  deliveredAt DateTime @default(now())
+
+  @@index([webhookId])
+  @@index([deliveredAt])
+  @@map("webhook_deliveries")
+}
+
+// ============ NOTIFICATIONS ============
+
+model Notification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type        String   // info, success, warning, error, system
+  category    String?  // project, billing, security, etc.
+  title       String
+  message     String
+  
+  // Link
+  actionUrl   String?
+  actionLabel String?
+  
+  // Status
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  
+  // Delivery
+  emailSent   Boolean  @default(false)
+  pushSent    Boolean  @default(false)
+  
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ============ RATE LIMITING ============
+
+model RateLimitRecord {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  key         String   // userId:endpoint or ip:endpoint
+  endpoint    String
+  
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
+  
+  // TTL index will auto-delete
+  expiresAt   DateTime
+
+  @@unique([key, endpoint])
+  @@index([expiresAt])
+  @@map("rate_limit_records")
+}
+
+// ============ EMAIL TEMPLATES ============
+
+model EmailTemplate {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  key         String   @unique // welcome, password_reset, invoice, etc.
+  name        String
+  description String?
+  
+  subject     String
+  htmlBody    String
+  textBody    String?
+  
+  variables   String[] @default([]) // Available template variables
+  
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_templates")
+}
