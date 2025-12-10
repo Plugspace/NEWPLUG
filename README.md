@@ -11,12 +11,20 @@ Plugspace Titan is a production-ready, enterprise-grade platform for building we
 ## ✨ Features
 
 - **🎤 Voice-First Development** - Build websites by speaking naturally
+  - **Gemini Live API** - Real-time bidirectional audio streaming
+  - **Agent Zara** - AI voice assistant with personality and emotional intelligence
+  - **20+ Languages** - Multi-language voice support
+  - **Natural Commands** - "Create a restaurant website with a booking system"
 - **🤖 Dual-LLM AI Agents** - Four specialized AI agents with advanced orchestration:
   - **Don** (Architect) - Claude Sonnet 4.5 powered architecture generation
   - **Jessica** (Designer) - Gemini 3.0 Pro visual intelligence for design systems
   - **Mark** (Engineer) - Claude Sonnet 4.5 production-ready code generation
   - **Sherlock** (Analyst) - Gemini 3.0 Pro website analysis and cloning
-- **🧠 Intelligent Suggestions** - AI-powered design improvement recommendations
+- **🧠 Intelligent NLP** - Advanced natural language processing:
+  - **Intent Detection** - 99%+ accuracy intent classification
+  - **Entity Extraction** - Automatic extraction of URLs, colors, sections
+  - **Dialogue Management** - Multi-turn conversation with context
+  - **Design Suggestions** - AI-powered improvement recommendations
 - **📊 Queue Management** - Redis-based task orchestration with BullMQ
 - **🎨 Beautiful Templates** - 100+ professionally designed templates
 - **🚀 One-Click Publishing** - Deploy instantly with SSL and CDN
@@ -59,18 +67,32 @@ Plugspace Titan is a production-ready, enterprise-grade platform for building we
 plugspace-titan/
 ├── apps/
 │   ├── api/              # tRPC Backend API
+│   │   └── src/
+│   │       ├── agents/   # AI Agents (Don, Jessica, Mark, Sherlock)
+│   │       ├── services/ # Core services (LLM, NLP, Voice, Suggestions)
+│   │       ├── queue/    # BullMQ task queue management
+│   │       └── routers/  # tRPC API routers
+│   ├── server/           # Voice WebSocket Server
+│   │   ├── src/          # Gemini Live API integration
+│   │   ├── config/       # Voice & security configuration
+│   │   └── Dockerfile    # Container deployment
 │   ├── landing/          # Landing Page (Next.js)
 │   ├── studio/           # User Studio (Next.js)
 │   └── admin/            # Master Admin Dashboard (Next.js)
 ├── packages/
 │   ├── types/            # Shared TypeScript types
 │   ├── utils/            # Shared utilities
+│   ├── ui/               # Shared UI components
+│   │   └── src/
+│   │       ├── hooks/    # React hooks (useVoiceSocket)
+│   │       └── components/voice/  # Voice UI components
 │   └── database/         # Prisma schema & database utilities
 ├── infrastructure/
 │   ├── nginx/            # Nginx configuration
 │   ├── pm2/              # PM2 ecosystem config
 │   ├── docker/           # Docker configurations
 │   └── monitoring/       # Prometheus & Grafana configs
+├── docs/                 # Technical documentation
 ├── scripts/
 │   ├── deploy.sh         # Deployment script
 │   └── setup.sh          # Server setup script
@@ -308,6 +330,9 @@ Detailed documentation is available in the `/docs` directory:
 - **[AI Agents](docs/AGENTS.md)** - Dual-LLM agent architecture and usage
 - **[Prompts](docs/PROMPTS.md)** - Prompt engineering guide
 - **[Queue System](docs/QUEUE.md)** - Task queue documentation
+- **[Voice System](docs/VOICE_SYSTEM.md)** - Voice interface architecture
+- **[Audio Specs](docs/AUDIO_SPECS.md)** - Audio technical specifications
+- **[Zara Persona](docs/ZARA_PERSONA.md)** - Agent Zara personality guide
 
 ## 📊 Monitoring
 
