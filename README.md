@@ -81,9 +81,8 @@ plugspace-titan/
 ### Prerequisites
 
 - Node.js 20 LTS
-- MongoDB 7
-- Redis 7
-- npm 10+
+- Docker & Docker Compose
+- Git
 
 ### Installation
 
@@ -92,23 +91,40 @@ plugspace-titan/
 git clone https://github.com/plugspace/titan.git
 cd titan
 
-# Install dependencies
-npm install
-
-# Copy environment variables
-cp .env.example .env
+# Run first-time setup (installs deps, creates .env, sets up git hooks)
+make setup
 
 # Edit .env with your configuration
 vim .env
+
+# Start development environment
+make dev
+```
+
+### Using Docker (Recommended)
+
+```bash
+# Start all services with Docker Compose
+make dev-docker
+
+# View logs
+make logs
+
+# Stop services
+make stop
+```
+
+### Manual Setup
+
+```bash
+# Install dependencies
+npm install
 
 # Generate Prisma client
 npm run db:generate
 
 # Push database schema
 npm run db:push
-
-# Seed the database (optional)
-npm run db:seed
 
 # Build all packages
 npm run build
@@ -138,18 +154,80 @@ Key variables:
 - `FIREBASE_*` - Firebase Admin SDK credentials
 - `STRIPE_*` - Stripe payment integration
 
+## 🛠️ Make Commands
+
+All automation is handled through the Makefile:
+
+```bash
+# Setup & Installation
+make setup            # Complete first-time setup
+make install          # Install dependencies
+make install-clean    # Clean install all dependencies
+
+# Development
+make dev              # Start development with hot-reload
+make dev-docker       # Full Docker development environment
+make dev-services     # Start only database services
+
+# Building
+make build            # Build all applications
+make build-docker     # Build Docker images
+
+# Testing
+make test             # Run full test suite
+make lint             # Run ESLint
+make typecheck        # TypeScript type checking
+make check            # Run all checks (lint, type, test)
+
+# Database
+make db-generate      # Generate Prisma client
+make db-push          # Push schema changes
+make db-migrate       # Run migrations
+make db-seed          # Seed database
+make db-studio        # Open Prisma Studio
+
+# Production
+make prod             # Production deployment
+make deploy           # Full production deployment
+make deploy-rolling   # Zero-downtime rolling deployment
+make scale            # Horizontal scaling
+
+# Monitoring
+make logs             # View all service logs
+make health           # Check service health
+make monitor          # Open Grafana dashboard
+
+# Security
+make security-scan    # Run security vulnerability scan
+make security-audit   # Full security audit
+
+# Backup & Restore
+make backup           # Create database backup
+make restore          # Restore from backup
+
+# Cleanup
+make clean            # Clean build artifacts
+make clean-docker     # Remove Docker containers
+make prune            # Prune Docker system
+```
+
 ## 🐳 Docker Deployment
 
 ```bash
-# Build and start all services
-cd infrastructure/docker
-docker-compose up -d
+# Development environment
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# Production environment
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Scale services
+docker compose up -d --scale api=3
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
 ## 📦 Production Deployment
@@ -189,9 +267,43 @@ certbot --nginx \
 - **Authentication**: Firebase Admin SDK with JWT tokens
 - **Authorization**: Role-based access control (USER, STUDIO_ADMIN, MASTER_ADMIN)
 - **Multi-Tenant Isolation**: Complete data separation per organization
-- **Rate Limiting**: Configurable per endpoint
-- **Encryption**: AES-256-GCM for sensitive data
-- **HTTPS**: TLS 1.2/1.3 with Let's Encrypt
+- **Rate Limiting**: Tiered rate limiting per subscription level
+- **MFA**: TOTP, SMS, and Email verification
+- **Encryption**: AES-256-GCM for sensitive data at rest
+- **HTTPS**: TLS 1.3 with Let's Encrypt
+
+## 🚨 Error Handling
+
+Comprehensive error handling system with:
+
+- **Error Categories**: Authentication, Authorization, Validation, Rate Limiting, Server, AI
+- **Error Codes**: Standardized codes (e.g., `AUTH_001`, `VAL_001`)
+- **Request Tracking**: Unique request IDs for debugging
+- **Retry Logic**: Automatic retry for transient failures
+- **User-Friendly Messages**: Clear suggestions for resolution
+
+Example error response:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "AUTH_001",
+    "message": "Authentication required",
+    "requestId": "req_abc123",
+    "timestamp": "2024-01-01T00:00:00.000Z",
+    "suggestion": "Please log in to access this resource."
+  }
+}
+```
+
+## 📚 Documentation
+
+Detailed documentation is available in the `/docs` directory:
+
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
+- **[API Reference](docs/API.md)** - Complete API documentation
+- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[Security](docs/SECURITY.md)** - Security practices and compliance
 
 ## 📊 Monitoring
 
